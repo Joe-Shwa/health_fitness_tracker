@@ -51,7 +51,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .card { background: var(--white); border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: var(--shadow); border: 1px solid var(--border); }
 .card-title { font-size: 12px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
 
-.macro-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; }
+.macro-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr)); gap: 6px; }
 .macro-item { text-align: center; }
 .ring-wrap { position: relative; width: 60px; height: 60px; margin: 0 auto 4px; }
 .ring-wrap svg { transform: rotate(-90deg); }
@@ -95,10 +95,13 @@ select.input-field { appearance: auto; }
 .meal-del { color: var(--red); font-size: 20px; cursor: pointer; padding: 4px; line-height: 1; flex-shrink: 0; }
 
 .qa-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-top: 10px; }
-.qa-btn { background: var(--blue-pale); border: 1px solid var(--border); border-radius: 10px; padding: 10px 6px; text-align: center; cursor: pointer; font-size: 11px; }
+.qa-btn { background: var(--blue-pale); border: 1px solid var(--border); border-radius: 10px; padding: 10px 6px; text-align: center; cursor: pointer; font-size: 11px; height: 100%; }
 .qa-icon { font-size: 20px; display: block; margin-bottom: 3px; }
 .qa-name { font-weight: 700; display: block; color: var(--dark); font-size: 11px; }
 .qa-p { color: var(--blue); font-weight: 600; font-size: 10px; }
+.qa-btn-wrap { position: relative; }
+.qa-add-btn { background: transparent; border: 1.5px dashed var(--border); color: var(--muted); }
+.qa-remove { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: var(--red); color: #fff; border: 2px solid var(--card-bg, #fff); font-size: 11px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
 
 .photo-area { border: 2px dashed var(--border); border-radius: 12px; padding: 20px; text-align: center; cursor: pointer; background: var(--blue-pale); margin-bottom: 12px; }
 .photo-area .pa-icon { font-size: 32px; margin-bottom: 6px; }
@@ -113,7 +116,7 @@ select.input-field { appearance: auto; }
 .lookup-result .lr-note { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
 
 /* MACRO FIELDS ROW */
-.macro-fields { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-bottom: 10px; }
+.macro-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr)); gap: 6px; margin-bottom: 10px; }
 .macro-field-wrap { }
 .macro-field-wrap .input-label { font-size: 10px; }
 .macro-field-wrap .input-field { padding: 8px 6px; font-size: 13px; text-align: center; }
@@ -142,6 +145,22 @@ select.input-field { appearance: auto; }
 .pill-dose { font-size: 11px; color: var(--muted); }
 .pill-check { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: all 0.2s; flex-shrink: 0; }
 .pill-check.done { background: var(--blue); border-color: var(--blue); color: white; }
+
+.fast-status-card { display: flex; align-items: center; gap: 12px; background: var(--blue-pale); border-radius: 12px; padding: 12px 14px; }
+.fast-status-card.eating { background: #ECFDF5; }
+.fast-status-card.fasting-active { background: #FFFBEB; }
+.fast-status-icon { font-size: 26px; flex-shrink: 0; }
+.fast-status-label { font-weight: 700; font-size: 14px; color: var(--dark); }
+.fast-status-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.fast-progress-ring-wrap { position: relative; width: 150px; height: 150px; margin: 4px auto 10px; }
+.fast-ring-svg { width: 150px; height: 150px; transform: rotate(-90deg); }
+.fast-ring-bg { fill: none; stroke: #E8F2FA; stroke-width: 10; }
+.fast-ring-fg { fill: none; stroke: var(--blue); stroke-width: 10; stroke-linecap: round; stroke-dasharray: 326.7; stroke-dashoffset: 326.7; transition: stroke-dashoffset 0.4s; }
+.fast-ring-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; }
+.fast-ring-elapsed { font-size: 22px; font-weight: 800; color: var(--dark); }
+.fast-ring-target { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.fast-hist-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.fast-hist-row:last-child { border-bottom: none; }
 
 .reta-card { background: linear-gradient(135deg, var(--dark), var(--blue)); border-radius: 12px; padding: 14px; color: white; margin-bottom: 12px; cursor: pointer; }
 .reta-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
@@ -383,6 +402,7 @@ select.input-field { appearance: auto; }
   <div class="nav-tab active" onclick="showTab('today',this)"><span class="ti">📊</span>Today</div>
   <div class="nav-tab" onclick="showTab('log',this)"><span class="ti">🍽️</span>Log</div>
   <div class="nav-tab" onclick="showTab('movement',this)"><span class="ti">🏃</span>Move</div>
+  <div class="nav-tab" id="nav-fasting" onclick="showTab('fasting',this)"><span class="ti">⏱️</span>Fasting</div>
   <div class="nav-tab" id="nav-weight" onclick="showTab('weight',this)"><span class="ti">⚖️</span>Weight</div>
   <div class="nav-tab" id="nav-sleep" onclick="showTab('sleep',this)"><span class="ti">😴</span>Sleep</div>
   <div class="nav-tab" id="nav-supps" onclick="showTab('supps',this)"><span class="ti">💊</span>Supps</div>
@@ -446,6 +466,10 @@ select.input-field { appearance: auto; }
     <p style="margin-bottom:10px">Today, Log, and Move are always on. Turn the others on or off to keep things simple — nothing gets deleted, just hidden.</p>
     <div id="settings-tab-list"></div>
 
+    <div class="settings-section-title">Tracked Nutrients</div>
+    <p style="margin-bottom:10px">Calories and protein are always tracked. Turn Fat, Carbs and Fiber on or off to personalise what shows up on Today and in your log — your targets keep being calculated either way, this just controls what's on screen.</p>
+    <div id="settings-nutrient-list"></div>
+
     <button class="btn btn-primary" style="margin-top:18px" onclick="closeSettings()">Save & Close</button>
   </div>
 </div>
@@ -481,13 +505,17 @@ select.input-field { appearance: auto; }
         <div class="ring-wrap"><svg width="60" height="60" viewBox="0 0 60 60"><circle cx="30" cy="30" r="24" fill="none" stroke="#E8F2FA" stroke-width="6"/><circle cx="30" cy="30" r="24" fill="none" stroke="#10B981" stroke-width="6" stroke-dasharray="150.8" id="r-pro" stroke-dashoffset="150.8" stroke-linecap="round"/></svg><div class="ring-label"><div class="ring-val" id="v-pro">0</div><div class="ring-unit">g</div></div></div>
         <div class="macro-name">Protein ⭐</div><div class="macro-goal" id="g-pro">/ 184g</div>
       </div>
-      <div class="macro-item">
+      <div class="macro-item" id="mi-fat">
         <div class="ring-wrap"><svg width="60" height="60" viewBox="0 0 60 60"><circle cx="30" cy="30" r="24" fill="none" stroke="#E8F2FA" stroke-width="6"/><circle cx="30" cy="30" r="24" fill="none" stroke="#F59E0B" stroke-width="6" stroke-dasharray="150.8" id="r-fat" stroke-dashoffset="150.8" stroke-linecap="round"/></svg><div class="ring-label"><div class="ring-val" id="v-fat">0</div><div class="ring-unit">g</div></div></div>
         <div class="macro-name">Fat</div><div class="macro-goal" id="g-fat">/ 80g</div>
       </div>
-      <div class="macro-item">
+      <div class="macro-item" id="mi-carb">
         <div class="ring-wrap"><svg width="60" height="60" viewBox="0 0 60 60"><circle cx="30" cy="30" r="24" fill="none" stroke="#E8F2FA" stroke-width="6"/><circle cx="30" cy="30" r="24" fill="none" stroke="#3B82F6" stroke-width="6" stroke-dasharray="150.8" id="r-carb" stroke-dashoffset="150.8" stroke-linecap="round"/></svg><div class="ring-label"><div class="ring-val" id="v-carb">0</div><div class="ring-unit">g</div></div></div>
         <div class="macro-name">Carbs</div><div class="macro-goal" id="g-carb">/ 234g</div>
+      </div>
+      <div class="macro-item hidden" id="mi-fiber">
+        <div class="ring-wrap"><svg width="60" height="60" viewBox="0 0 60 60"><circle cx="30" cy="30" r="24" fill="none" stroke="#E8F2FA" stroke-width="6"/><circle cx="30" cy="30" r="24" fill="none" stroke="#9333EA" stroke-width="6" stroke-dasharray="150.8" id="r-fib" stroke-dashoffset="150.8" stroke-linecap="round"/></svg><div class="ring-label"><div class="ring-val" id="v-fib">0</div><div class="ring-unit">g</div></div></div>
+        <div class="macro-name">Fiber</div><div class="macro-goal" id="g-fib">/ 30g</div>
       </div>
     </div>
   </div>
@@ -572,8 +600,9 @@ select.input-field { appearance: auto; }
     <div class="macro-fields">
       <div class="macro-field-wrap"><div class="input-label">Cal</div><input class="input-field" id="m-cal" type="number" placeholder="0"></div>
       <div class="macro-field-wrap"><div class="input-label">Protein g</div><input class="input-field" id="m-pro" type="number" placeholder="0"></div>
-      <div class="macro-field-wrap"><div class="input-label">Fat g</div><input class="input-field" id="m-fat" type="number" placeholder="0"></div>
-      <div class="macro-field-wrap"><div class="input-label">Carbs g</div><input class="input-field" id="m-carb" type="number" placeholder="0"></div>
+      <div class="macro-field-wrap" id="mf-fat"><div class="input-label">Fat g</div><input class="input-field" id="m-fat" type="number" placeholder="0"></div>
+      <div class="macro-field-wrap" id="mf-carb"><div class="input-label">Carbs g</div><input class="input-field" id="m-carb" type="number" placeholder="0"></div>
+      <div class="macro-field-wrap hidden" id="mf-fiber"><div class="input-label">Fiber g</div><input class="input-field" id="m-fib" type="number" placeholder="0"></div>
     </div>
     <button class="btn btn-primary" id="m-save-btn" onclick="addManual()">Add to today</button>
     <button class="btn btn-secondary btn-sm hidden" id="m-cancel-btn" style="width:auto;margin-top:8px" onclick="cancelMealEdit()">Cancel edit</button>
@@ -613,6 +642,66 @@ select.input-field { appearance: auto; }
     <div class="stat-card"><div class="stat-val" id="mv-today-cal">--</div><div class="stat-lbl" id="mv-cal-lbl">Cal burned today</div></div>
   </div>
   <div class="card"><div class="card-title">Movement History</div><div id="mv-history" style="font-size:13px;color:var(--muted)">No entries yet.</div></div>
+</div>
+
+<!-- FASTING -->
+<div class="section hidden" id="tab-fasting">
+  <div class="card">
+    <div class="card-title">⏱️ Daily Eating Window</div>
+    <div class="info-box blue" style="margin-bottom:10px">Time-restricted eating, personalised to you — set your own window instead of a fixed 18:6 or 16:8. Turn it off if you'd rather not track this.</div>
+    <div class="pill-row" style="margin-bottom:10px">
+      <div class="pill-name">Track a daily eating window</div>
+      <div class="pill-check" id="fw-toggle" onclick="toggleFastWindowEnabled()"></div>
+    </div>
+    <div id="fw-config">
+      <div class="input-row">
+        <div style="flex:1"><div class="input-label">Eating window (hours)</div><input class="input-field" id="fw-hours" type="number" min="1" max="12" value="8" onchange="saveFastWindowSettings()"></div>
+        <div style="flex:1"><div class="input-label">Window opens at</div><input class="input-field" id="fw-start" type="time" value="12:00" onchange="saveFastWindowSettings()"></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px" id="fw-summary"></div>
+      <div class="fast-status-card" id="fw-status-card">
+        <div class="fast-status-icon" id="fw-status-icon">⏱️</div>
+        <div style="flex:1">
+          <div class="fast-status-label" id="fw-status-label">--</div>
+          <div class="fast-status-sub" id="fw-status-sub">--</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🌊 Extended / Periodic Fast</div>
+    <div class="info-box blue" style="margin-bottom:10px">For longer fasts — 24, 48, 72 hours or more. Independent of your daily eating window above; use whichever fits, or both.</div>
+    <div id="ef-idle">
+      <div class="input-label">Choose a length</div>
+      <div class="choice-row" style="flex-wrap:wrap">
+        <div class="goal-card" style="flex:1;min-width:70px" onclick="startExtendedFast(24)"><div class="gc-title">24h</div></div>
+        <div class="goal-card" style="flex:1;min-width:70px" onclick="startExtendedFast(48)"><div class="gc-title">48h</div></div>
+        <div class="goal-card" style="flex:1;min-width:70px" onclick="startExtendedFast(72)"><div class="gc-title">72h</div></div>
+        <div class="goal-card" style="flex:1;min-width:70px" onclick="startExtendedFast(120)"><div class="gc-title">5 days</div></div>
+      </div>
+      <div class="input-row" style="margin-top:10px;align-items:flex-end">
+        <div style="flex:1"><div class="input-label">Or a custom length (hours)</div><input class="input-field" id="ef-custom-hours" type="number" min="1" placeholder="e.g. 36"></div>
+        <button class="btn btn-secondary" style="width:auto" onclick="startCustomExtendedFast()">Start</button>
+      </div>
+    </div>
+    <div id="ef-active" class="hidden">
+      <div class="fast-progress-ring-wrap">
+        <svg viewBox="0 0 120 120" class="fast-ring-svg">
+          <circle cx="60" cy="60" r="52" class="fast-ring-bg"/>
+          <circle cx="60" cy="60" r="52" class="fast-ring-fg" id="ef-ring"/>
+        </svg>
+        <div class="fast-ring-center">
+          <div class="fast-ring-elapsed" id="ef-elapsed">0h</div>
+          <div class="fast-ring-target" id="ef-target">of 24h</div>
+        </div>
+      </div>
+      <div style="text-align:center;font-size:12px;color:var(--muted);margin-bottom:12px" id="ef-eta">--</div>
+      <button class="btn btn-primary" onclick="endExtendedFast()" id="ef-end-btn">End fast</button>
+    </div>
+  </div>
+
+  <div class="card"><div class="card-title">History</div><div id="ef-history" style="font-size:13px;color:var(--muted)">No fasts logged yet.</div></div>
 </div>
 
 <!-- WEIGHT -->
@@ -744,7 +833,9 @@ let S = {
   peptides: null,
   peptideLogs: null,
   peptideChecks: null,
-  settings: {tabs:{weight:true,sleep:true,supps:true,peptides:false,ask:true}},
+  quickFoods: null,
+  fasting: {windowEnabled:false, windowHours:8, windowStart:'12:00', current:null, log:[]},
+  settings: {tabs:{weight:true,sleep:true,supps:true,peptides:false,fasting:false,ask:true}, nutrients:{fat:true,carb:true,fiber:false}},
   lastGreetedDate: null,
   tombstones: []
 };
@@ -777,16 +868,26 @@ function migrateArr(arr,prefix,dateField){
 function migrateState(){
   if(!S.tombstones)S.tombstones=[];
   if(!S.theme)S.theme='ocean';
-  if(!S.settings)S.settings={tabs:{weight:true,sleep:true,supps:true,peptides:false,ask:true}};
-  if(!S.settings.tabs)S.settings.tabs={weight:true,sleep:true,supps:true,peptides:false,ask:true};
+  if(!S.settings)S.settings={tabs:{weight:true,sleep:true,supps:true,peptides:false,fasting:false,ask:true},nutrients:{fat:true,carb:true,fiber:false}};
+  if(!S.settings.tabs)S.settings.tabs={weight:true,sleep:true,supps:true,peptides:false,fasting:false,ask:true};
   ['weight','sleep','supps','ask'].forEach(k=>{if(typeof S.settings.tabs[k]!=='boolean')S.settings.tabs[k]=true;});
   if(typeof S.settings.tabs.peptides!=='boolean')S.settings.tabs.peptides=false;
+  if(typeof S.settings.tabs.fasting!=='boolean')S.settings.tabs.fasting=false;
+  if(!S.settings.nutrients)S.settings.nutrients={fat:true,carb:true,fiber:false};
+  if(typeof S.settings.nutrients.fat!=='boolean')S.settings.nutrients.fat=true;
+  if(typeof S.settings.nutrients.carb!=='boolean')S.settings.nutrients.carb=true;
+  if(typeof S.settings.nutrients.fiber!=='boolean')S.settings.nutrients.fiber=false;
   if(!S.meals)S.meals=[];
   if(!S.water)S.water=[];
   migrateArr(S.weights,'w');
   migrateArr(S.sleep,'sleep');
   migrateArr(S.meals,'meal','date');
   migrateArr(S.water,'water','date');
+  // Normalise any macro/water values that were ever saved as strings (an older schema, a bad
+  // sync merge, an AI response that quoted a number) back to real numbers — see the comment on
+  // totalsForDate for why leaving these as strings silently breaks totals via concatenation.
+  S.meals.forEach(m=>{m.cal=+m.cal||0;m.pro=+m.pro||0;m.fat=+m.fat||0;m.carb=+m.carb||0;m.fib=+m.fib||0;});
+  S.water.forEach(w=>{w.ml=+w.ml||0;});
   if(!S.movement)S.movement=[];
   migrateArr(S.movement,'movement','date');
   if(!S.streak)S.streak={count:0,longest:0,log:[]};
@@ -803,17 +904,28 @@ function migrateState(){
   migrateArr(S.peptideLogs,'pep_log');
   if(!S.peptideChecks)S.peptideChecks={};
   S.peptides.forEach(p=>{if(p.tracking==='checklist'&&!(p.id in S.peptideChecks))S.peptideChecks[p.id]=false;});
+  // Quick Add: seed from the default list on first run, then it's the user's own editable list
+  if(!S.quickFoods){
+    S.quickFoods=QUICK_FOODS_SEED.map(f=>({...f,id:newId('qf'),custom:false,updatedAt:Date.now()}));
+  }
+  S.quickFoods.forEach(f=>{if(!f.id)f.id=newId('qf');if(!f.updatedAt)f.updatedAt=Date.now();});
+  if(!S.fasting)S.fasting={windowEnabled:false,windowHours:8,windowStart:'12:00',current:null,log:[]};
+  if(typeof S.fasting.windowEnabled!=='boolean')S.fasting.windowEnabled=false;
+  if(!S.fasting.windowHours)S.fasting.windowHours=8;
+  if(!S.fasting.windowStart)S.fasting.windowStart='12:00';
+  if(!S.fasting.log)S.fasting.log=[];
+  migrateArr(S.fasting.log,'fast');
 }
 
-const QUICK_FOODS = [
-  {n:"Greek Yoghurt",i:"🥛",c:150,p:17,f:5,cb:8,a:"170g"},
-  {n:"2 Eggs",i:"🥚",c:140,p:12,f:10,cb:1,a:"2 eggs"},
-  {n:"Tuna Tin",i:"🐟",c:120,p:28,f:1,cb:0,a:"95g tin"},
-  {n:"Chicken Breast",i:"🍗",c:165,p:31,f:3,cb:0,a:"100g"},
-  {n:"Salmon Fillet",i:"🐠",c:208,p:28,f:10,cb:0,a:"120g"},
-  {n:"Cottage Cheese",i:"🧀",c:100,p:14,f:2,cb:5,a:"150g"},
-  {n:"Protein Shake",i:"🥤",c:130,p:25,f:2,cb:5,a:"1 scoop"},
-  {n:"Beef Mince",i:"🥩",c:250,p:26,f:15,cb:0,a:"100g"},
+const QUICK_FOODS_SEED = [
+  {n:"Greek Yoghurt",i:"🥛",c:150,p:17,f:5,cb:8,fb:0,a:"170g"},
+  {n:"2 Eggs",i:"🥚",c:140,p:12,f:10,cb:1,fb:0,a:"2 eggs"},
+  {n:"Tuna Tin",i:"🐟",c:120,p:28,f:1,cb:0,fb:0,a:"95g tin"},
+  {n:"Chicken Breast",i:"🍗",c:165,p:31,f:3,cb:0,fb:0,a:"100g"},
+  {n:"Salmon Fillet",i:"🐠",c:208,p:28,f:10,cb:0,fb:0,a:"120g"},
+  {n:"Cottage Cheese",i:"🧀",c:100,p:14,f:2,cb:5,fb:0,a:"150g"},
+  {n:"Protein Shake",i:"🥤",c:130,p:25,f:2,cb:5,fb:1,a:"1 scoop"},
+  {n:"Beef Mince",i:"🥩",c:250,p:26,f:15,cb:0,fb:0,a:"100g"},
 ];
 
 const SUPPS = [
@@ -846,7 +958,8 @@ function computeMacros(p){
   const fat = Math.round((cals*fatPct)/9);
   const carbs = Math.max(50,Math.round((cals-protein*4-fat*9)/4));
   const water = Math.round((weight/30)*1000);
-  return {cals,protein,fat,carbs,water,bmr:Math.round(bmr),tdee:Math.round(tdee),proteinPerKg,fatPct};
+  const fiber = Math.round((cals/1000)*14); // ~14g per 1000kcal — standard dietary-guideline benchmark
+  return {cals,protein,fat,carbs,water,fiber,bmr:Math.round(bmr),tdee:Math.round(tdee),proteinPerKg,fatPct};
 }
 function macroExplanation(p,m){
   const sex=p.sex==='female'?'female':'male';
@@ -857,10 +970,11 @@ function macroExplanation(p,m){
   return `Your estimated maintenance calories are <strong>~${m.tdee}/day</strong> (Mifflin-St Jeor BMR of ~${m.bmr} × ${ACTIVITY_LABEL[p.activity||'moderate']}). Since your goal is ${goalLabel}, your target is ${pctLine}: <strong>${m.cals} cal/day</strong>.<br><br>`+
     `Protein is set at <strong>${m.proteinPerKg}g per kg</strong> of your current bodyweight (<strong>${m.protein}g</strong> total) — higher while losing weight to help protect muscle, moderate while maintaining, and elevated while building to support muscle growth.<br><br>`+
     `Fat is set to <strong>${Math.round(m.fatPct*100)}%</strong> of your calories (<strong>${m.fat}g</strong>) — ${fatNote}.<br><br>`+
-    `The rest of your calories — <strong>${m.carbs}g carbs</strong> — fuel training, daily activity and recovery.`;
+    `The rest of your calories — <strong>${m.carbs}g carbs</strong> — fuel training, daily activity and recovery.<br><br>`+
+    `Fiber is set at <strong>${m.fiber}g</strong> (~14g per 1000 calories, the standard dietary-guideline benchmark) — it's off by default on your Today screen, turn it on in Settings under "Tracked Nutrients" if you want to watch it.`;
 }
 function macroChips(m){
-  return `<span class="tag">🔥 ${m.cals} cal</span><span class="tag" style="background:#ECFDF5;color:#10B981">💪 ${m.protein}g protein</span><span class="tag" style="background:#FFFBEB;color:#F59E0B">🥑 ${m.fat}g fat</span><span class="tag" style="background:#EFF6FF;color:#3B82F6">🍝 ${m.carbs}g carbs</span><span class="tag" style="background:#ECFEFF;color:#06B6D4">💧 ${(m.water/1000).toFixed(1)}L water</span>`;
+  return `<span class="tag">🔥 ${m.cals} cal</span><span class="tag" style="background:#ECFDF5;color:#10B981">💪 ${m.protein}g protein</span><span class="tag" style="background:#FFFBEB;color:#F59E0B">🥑 ${m.fat}g fat</span><span class="tag" style="background:#EFF6FF;color:#3B82F6">🍝 ${m.carbs}g carbs</span><span class="tag" style="background:#F3E8FF;color:#9333EA">🌾 ${m.fiber}g fiber</span><span class="tag" style="background:#ECFEFF;color:#06B6D4">💧 ${(m.water/1000).toFixed(1)}L water</span>`;
 }
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
@@ -876,6 +990,7 @@ window.onload = () => {
   applyTheme(S.theme);
   if(S.profile){showApp();renderViewDate();maybeShowWelcome();}
   renderChatGreeting();
+  setInterval(()=>{updateFastWindowStatus();renderExtendedFastUI();},30000);
 };
 function loadLocal(){try{const d=localStorage.getItem('generic_tracker_v1');if(d)S={...S,...JSON.parse(d)};}catch(e){}migrateState();}
 function saveLocal(){
@@ -904,6 +1019,9 @@ function showApp(){
   const titleEl=document.getElementById('h-title');
   if(titleEl&&S.profile)titleEl.textContent=(S.profile.name||'Your')+"'s Tracker";
   applyTabSettings();
+  applyNutrientSettings();
+  renderQuickAdd();
+  renderFastingTab();
 }
 function firstName(){return (S.profile&&S.profile.name)?S.profile.name.split(' ')[0]:'there';}
 // Builds a short, generic profile descriptor used in AI prompts instead of any hardcoded personal details
@@ -914,6 +1032,7 @@ function profileDescriptor(){
 
 // ─── SETTINGS (which tabs are visible — Today/Log/Move always on) ────────────
 const OPTIONAL_TABS=[
+  {key:'fasting',label:'⏱️ Fasting'},
   {key:'weight',label:'⚖️ Weight'},
   {key:'sleep',label:'😴 Sleep'},
   {key:'supps',label:'💊 Supps'},
@@ -932,6 +1051,7 @@ function openSettings(){
   updatePfSexUI();updatePfGoalUI();updatePfThemeUI();
   renderSettingsMacros();
   renderSettingsPanel();
+  renderSettingsNutrientPanel();
   document.getElementById('settings-overlay').classList.remove('hidden');
 }
 function closeSettings(){
@@ -977,7 +1097,7 @@ function recalcProfileTargets(){
   const weight=(()=>{const latest=[...S.weights].sort((a,b)=>new Date(b.date)-new Date(a.date))[0];return latest?latest.weight:S.profile.current;})();
   const p={sex:S._pfSex,age:parseFloat(document.getElementById('pf-age').value)||S.profile.age,height:parseFloat(document.getElementById('pf-height').value)||S.profile.height,weight,goalType:S._pfGoalType,activity:document.getElementById('pf-activity').value};
   const m=computeMacros(p);
-  S.profile.cals=m.cals;S.profile.protein=m.protein;S.profile.fat=m.fat;S.profile.carbs=m.carbs;S.profile.water=m.water;
+  S.profile.cals=m.cals;S.profile.protein=m.protein;S.profile.fat=m.fat;S.profile.carbs=m.carbs;S.profile.water=m.water;S.profile.fiber=m.fiber;
   saveLocal();renderSettingsMacros();updateAll();
 }
 function renderSettingsMacros(){
@@ -1015,6 +1135,30 @@ function applyTabSettings(){
     }
   });
   if(activeWasHidden)showTab('today',document.querySelector('.nav-tab[onclick*="\'today\'"]'));
+}
+
+// ─── SETTINGS (which nutrients show on Today/Log — Calories & Protein always on) ─
+const NUTRIENT_TOGGLES=[
+  {key:'fat',label:'🥑 Fat'},
+  {key:'carb',label:'🍞 Carbs'},
+  {key:'fiber',label:'🌾 Fiber'}
+];
+function renderSettingsNutrientPanel(){
+  const el=document.getElementById('settings-nutrient-list');
+  if(!el)return;
+  el.innerHTML=NUTRIENT_TOGGLES.map(t=>`
+    <div class="pill-row">
+      <div class="pill-name">${t.label}</div>
+      <div class="pill-check ${S.settings.nutrients[t.key]?'done':''}" onclick="toggleNutrientSetting('${t.key}')">${S.settings.nutrients[t.key]?'✓':''}</div>
+    </div>`).join('');
+}
+function toggleNutrientSetting(key){
+  S.settings.nutrients[key]=!S.settings.nutrients[key];
+  saveLocal();
+  renderSettingsNutrientPanel();
+  applyNutrientSettings();
+  updateMacros();
+  updateMealsList();
 }
 
 // ─── SETUP ────────────────────────────────────────────────────────────────────
@@ -1088,7 +1232,7 @@ function calcTargets(){
   const activity=document.getElementById('s-activity').value||'moderate';
   const p={sex,age,height,weight:cur,goalType,activity};
   const m=computeMacros(p);
-  S._pending={cals:m.cals,protein:m.protein,fat:m.fat,carbs:m.carbs,water:m.water};
+  S._pending={cals:m.cals,protein:m.protein,fat:m.fat,carbs:m.carbs,water:m.water,fiber:m.fiber};
   S._pendingGoal=goal;
   document.getElementById('review-macros').innerHTML=macroChips(m);
   document.getElementById('review-explain').innerHTML=macroExplanation(p,m);
@@ -1122,20 +1266,31 @@ function waterForDate(dateStr){return S.water.filter(w=>w.date===dateStr);}
 function movementForDate(dateStr){return S.movement.find(m=>m.date===dateStr)||null;}
 function sleepForDate(dateStr){return S.sleep.find(s=>s.date===dateStr)||null;}
 function weightForDate(dateStr){return S.weights.find(w=>w.date===dateStr)||null;}
-function totalsForDate(dateStr){return mealsForDate(dateStr).reduce((a,m)=>({cal:a.cal+(m.cal||0),pro:a.pro+(m.pro||0),fat:a.fat+(m.fat||0),carb:a.carb+(m.carb||0)}),{cal:0,pro:0,fat:0,carb:0});}
-function waterTotalForDate(dateStr){return waterForDate(dateStr).reduce((a,w)=>a+(w.ml||0),0);}
+// Coerced with unary + rather than plain (m.fat||0): if a value is ever stored as a string
+// (an AI response that quoted a number, an older/imported entry, a bad sync merge) plain "+"
+// on a string does JS string concatenation, not addition — e.g. 0 + "20" + "30" = "020" then
+// "02030" instead of 50. That mismatch is exactly what caused the runaway Fat numbers (things
+// like "2830g") in the personal build. Coercing every read here makes totals self-healing even
+// against data that was already saved with the wrong type, not just new entries going forward.
+function totalsForDate(dateStr){return mealsForDate(dateStr).reduce((a,m)=>({cal:a.cal+(+m.cal||0),pro:a.pro+(+m.pro||0),fat:a.fat+(+m.fat||0),carb:a.carb+(+m.carb||0),fib:a.fib+(+m.fib||0)}),{cal:0,pro:0,fat:0,carb:0,fib:0});}
+function waterTotalForDate(dateStr){return waterForDate(dateStr).reduce((a,w)=>a+(+w.ml||0),0);}
 
 // ─── MACROS (today display) ────────────────────────────────────────────────────
 function getTotals(){return totalsForDate(viewDateStr());}
 function updateMacros(){
   if(!S.profile)return;
-  const t=getTotals(),g={cal:S.profile.cals,pro:S.profile.protein,fat:S.profile.fat,carb:S.profile.carbs};
+  const t=getTotals(),g={cal:S.profile.cals,pro:S.profile.protein,fat:S.profile.fat,carb:S.profile.carbs,fib:S.profile.fiber||30};
+  const nut=(S.settings&&S.settings.nutrients)||{fat:true,carb:true,fiber:false};
+  document.getElementById('mi-fat').classList.toggle('hidden',!nut.fat);
+  document.getElementById('mi-carb').classList.toggle('hidden',!nut.carb);
+  document.getElementById('mi-fiber').classList.toggle('hidden',!nut.fiber);
   const sr=(id,val,goal)=>{const pct=Math.min(val/goal*100,100),el=document.getElementById('r-'+id);if(el)el.style.strokeDashoffset=150.8*(1-pct/100);const ve=document.getElementById('v-'+id);if(ve)ve.textContent=Math.round(val);};
-  sr('cal',t.cal,g.cal);sr('pro',t.pro,g.pro);sr('fat',t.fat,g.fat);sr('carb',t.carb,g.carb);
+  sr('cal',t.cal,g.cal);sr('pro',t.pro,g.pro);sr('fat',t.fat,g.fat);sr('carb',t.carb,g.carb);sr('fib',t.fib,g.fib);
   document.getElementById('g-cal').textContent='/ '+g.cal;
   document.getElementById('g-pro').textContent='/ '+g.pro+'g';
   document.getElementById('g-fat').textContent='/ '+g.fat+'g';
   document.getElementById('g-carb').textContent='/ '+g.carb+'g';
+  document.getElementById('g-fib').textContent='/ '+g.fib+'g';
   const rem=g.pro-t.pro,pm=document.getElementById('protein-msg');
   if(rem<=0){pm.style.color='var(--green)';pm.innerHTML='✅ Protein done. Muscle preservation ticked off for today.';}
   else if(rem<40){pm.style.color='var(--amber)';pm.innerHTML=`⚡ ${Math.round(rem)}g to go. A protein shake or chicken breast will close it.`;}
@@ -1156,7 +1311,7 @@ function updateWater(){
   }
 }
 function addWater(ml){
-  S.water.push({id:newId('water'),ml,date:viewDateStr(),updatedAt:Date.now()});
+  S.water.push({id:newId('water'),ml:+ml||0,date:viewDateStr(),updatedAt:Date.now()});
   saveLocal();updateWater();
 }
 function delWater(id){S.water=S.water.filter(w=>w.id!==id);markDeleted('water',id);saveLocal();updateWater();}
@@ -1165,13 +1320,25 @@ function updateMealsList(){
   const el=document.getElementById('meals-list');
   const meals=mealsForDate(viewDateStr());
   if(!meals.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No meals logged yet.</div>';return;}
-  el.innerHTML=meals.map(m=>`<div class="meal-item"><div class="meal-emoji">${m.emoji||'🍽️'}</div><div class="meal-info"><div class="meal-name">${m.name}</div><div class="meal-macros">${m.cal} cal · ${m.pro}g protein · ${m.fat}g fat · ${m.carb}g carbs</div></div><span class="meal-del" style="font-size:17px" onclick="editMeal('${m.id}')" title="Edit">✎</span><div class="meal-del" onclick="delMeal('${m.id}')" title="Delete">×</div></div>`).join('');
+  const nut=(S.settings&&S.settings.nutrients)||{fat:true,carb:true,fiber:false};
+  el.innerHTML=meals.map(m=>{
+    const parts=[`${m.cal} cal`,`${m.pro}g protein`];
+    if(nut.fat)parts.push(`${m.fat}g fat`);
+    if(nut.carb)parts.push(`${m.carb}g carbs`);
+    if(nut.fiber)parts.push(`${m.fib||0}g fiber`);
+    return `<div class="meal-item"><div class="meal-emoji">${m.emoji||'🍽️'}</div><div class="meal-info"><div class="meal-name">${m.name}</div><div class="meal-macros">${parts.join(' · ')}</div></div><span class="meal-del" style="font-size:17px" onclick="editMeal('${m.id}')" title="Edit">✎</span><div class="meal-del" onclick="delMeal('${m.id}')" title="Delete">×</div></div>`;
+  }).join('');
 }
 function delMeal(id){if(mealEditId===id)cancelMealEdit();S.meals=S.meals.filter(m=>m.id!==id);markDeleted('meal',id);saveLocal();updateAll();}
-function addMeal(m){S.meals.push({...m,id:newId('meal'),date:viewDateStr(),updatedAt:Date.now(),time:new Date().toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'})});saveLocal();updateAll();}
+// Every logging path (manual entry, Quick Add, text/photo AI lookup, chat actions, protein
+// shake) funnels through here, so this is the one place that needs to guarantee cal/pro/fat/
+// carb/fib are actually numbers before they're saved — an AI reply that quotes a number as
+// "28" instead of 28 would otherwise sit in storage as a string and silently concatenate
+// instead of add the next time totals are summed. Coercing on the way in stops that at the source.
+function addMeal(m){S.meals.push({...m,cal:+m.cal||0,pro:+m.pro||0,fat:+m.fat||0,carb:+m.carb||0,fib:+m.fib||0,id:newId('meal'),date:viewDateStr(),updatedAt:Date.now(),time:new Date().toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'})});saveLocal();updateAll();}
 function addManual(){
   const name=document.getElementById('m-food').value;if(!name)return;
-  const vals={name,cal:+document.getElementById('m-cal').value||0,pro:+document.getElementById('m-pro').value||0,fat:+document.getElementById('m-fat').value||0,carb:+document.getElementById('m-carb').value||0};
+  const vals={name,cal:+document.getElementById('m-cal').value||0,pro:+document.getElementById('m-pro').value||0,fat:+document.getElementById('m-fat').value||0,carb:+document.getElementById('m-carb').value||0,fib:+document.getElementById('m-fib').value||0};
   if(mealEditId){
     const idx=S.meals.findIndex(m=>m.id===mealEditId);
     if(idx>-1){S.meals[idx]={...S.meals[idx],...vals,updatedAt:Date.now()};}
@@ -1180,7 +1347,7 @@ function addManual(){
   } else {
     addMeal({...vals,emoji:'✏️'});
   }
-  ['m-food','m-cal','m-pro','m-fat','m-carb'].forEach(id=>document.getElementById(id).value='');
+  ['m-food','m-cal','m-pro','m-fat','m-carb','m-fib'].forEach(id=>document.getElementById(id).value='');
 }
 function editMeal(id){
   const m=S.meals.find(x=>x.id===id);if(!m)return;
@@ -1190,6 +1357,7 @@ function editMeal(id){
   document.getElementById('m-pro').value=m.pro;
   document.getElementById('m-fat').value=m.fat;
   document.getElementById('m-carb').value=m.carb;
+  document.getElementById('m-fib').value=m.fib||0;
   document.getElementById('m-save-btn').textContent='Update meal';
   document.getElementById('m-cancel-btn').classList.remove('hidden');
   showTab('log',document.querySelector('.nav-tab[onclick*="\'log\'"]'));
@@ -1199,18 +1367,186 @@ function cancelMealEdit(){
   mealEditId=null;
   document.getElementById('m-save-btn').textContent='Add to today';
   document.getElementById('m-cancel-btn').classList.add('hidden');
-  ['m-food','m-cal','m-pro','m-fat','m-carb'].forEach(id=>document.getElementById(id).value='');
+  ['m-food','m-cal','m-pro','m-fat','m-carb','m-fib'].forEach(id=>document.getElementById(id).value='');
 }
-function renderQuickAdd(){document.getElementById('qa-grid').innerHTML=QUICK_FOODS.map((f,i)=>`<div class="qa-btn" onclick="${f.qty?'showQtyPicker('+i+')':'addQuick('+i+')'}"><span class="qa-icon">${f.i}</span><span class="qa-name">${f.n}</span><span class="qa-p">${f.p}g protein</span></div>`).join('');}
-
-function showQtyPicker(i){
-  const f=QUICK_FOODS[i];
+// Shows/hides Fat, Carbs and Fiber inputs (manual entry) and rings (Today) per Settings > Tracked Nutrients.
+// Calories and Protein are always tracked — the day-status/streak logic depends on them.
+function applyNutrientSettings(){
+  const nut=(S.settings&&S.settings.nutrients)||{fat:true,carb:true,fiber:false};
+  const mfFat=document.getElementById('mf-fat'),mfCarb=document.getElementById('mf-carb'),mfFib=document.getElementById('mf-fiber');
+  if(mfFat)mfFat.classList.toggle('hidden',!nut.fat);
+  if(mfCarb)mfCarb.classList.toggle('hidden',!nut.carb);
+  if(mfFib)mfFib.classList.toggle('hidden',!nut.fiber);
+  const miFat=document.getElementById('mi-fat'),miCarb=document.getElementById('mi-carb'),miFib=document.getElementById('mi-fiber');
+  if(miFat)miFat.classList.toggle('hidden',!nut.fat);
+  if(miCarb)miCarb.classList.toggle('hidden',!nut.carb);
+  if(miFib)miFib.classList.toggle('hidden',!nut.fiber);
+}
+// Quick Add is now a personal, editable list (S.quickFoods) — items are looked up by id,
+// not array index, since the user can add/remove entries and indices would shift underneath them.
+function renderQuickAdd(){
+  const list=S.quickFoods||[];
+  document.getElementById('qa-grid').innerHTML=list.map(f=>`
+    <div class="qa-btn-wrap" style="position:relative">
+      <div class="qa-btn" onclick="${f.qty?'showQtyPicker(\''+f.id+'\')':'addQuick(\''+f.id+'\')'}"><span class="qa-icon">${f.i||'🍽️'}</span><span class="qa-name">${f.n}</span><span class="qa-p">${f.p}g protein</span></div>
+      ${f.custom?`<button class="qa-remove" title="Remove from Quick Add" onclick="event.stopPropagation();removeQuickFood('${f.id}')">✕</button>`:''}
+    </div>`).join('')
+    +`<div class="qa-btn qa-add-btn" onclick="showAddQuickFood()"><span class="qa-icon">➕</span><span class="qa-name">Add food</span><span class="qa-p">your own</span></div>`;
+}
+function findQuickFood(id){return (S.quickFoods||[]).find(f=>f.id===id);}
+function showQtyPicker(id){
+  const f=findQuickFood(id);if(!f)return;
   const qty=prompt('How many '+f.n+'s?','2');
   if(!qty||isNaN(qty)||+qty<1)return;
   const n=+qty;
-  addMeal({name:n+'x '+f.n,cal:Math.round(f.c*n),pro:Math.round(f.p*n),fat:Math.round(f.f*n),carb:Math.round(f.cb*n),emoji:f.i});
+  addMeal({name:n+'x '+f.n,cal:Math.round(f.c*n),pro:Math.round(f.p*n),fat:Math.round((f.f||0)*n),carb:Math.round((f.cb||0)*n),fib:Math.round((f.fb||0)*n),emoji:f.i});
 }
-function addQuick(i){const f=QUICK_FOODS[i];addMeal({name:f.n+(f.a?' ('+f.a+')':''),cal:f.c,pro:f.p,fat:f.f,carb:f.cb,emoji:f.i});}
+function addQuick(id){
+  const f=findQuickFood(id);if(!f)return;
+  addMeal({name:f.n+(f.a?' ('+f.a+')':''),cal:f.c,pro:f.p,fat:f.f||0,carb:f.cb||0,fib:f.fb||0,emoji:f.i});
+}
+// "+ Add food" — lets the user save one of their own regularly-eaten items to Quick Add.
+function showAddQuickFood(){
+  const name=prompt('Food name (e.g. "Oat bowl"):');
+  if(!name||!name.trim())return;
+  const cal=prompt('Calories per serving:','0');
+  if(cal===null||isNaN(cal))return;
+  const pro=prompt('Protein (g) per serving:','0');
+  if(pro===null||isNaN(pro))return;
+  const fat=prompt('Fat (g) per serving (optional):','0');
+  const carb=prompt('Carbs (g) per serving (optional):','0');
+  const fiber=prompt('Fiber (g) per serving (optional):','0');
+  const amount=prompt('Serving description, e.g. "1 bowl" (optional):','')||'';
+  const emoji=prompt('Pick an emoji for it (optional):','🍽️')||'🍽️';
+  S.quickFoods.push({id:newId('qf'),n:name.trim(),i:emoji.trim()||'🍽️',c:Math.round(+cal)||0,p:Math.round(+pro)||0,f:Math.round(+fat)||0,cb:Math.round(+carb)||0,fb:Math.round(+fiber)||0,a:amount.trim(),custom:true,updatedAt:Date.now()});
+  saveLocal();
+  renderQuickAdd();
+}
+function removeQuickFood(id){
+  if(!confirm('Remove this from your Quick Add list?'))return;
+  S.quickFoods=(S.quickFoods||[]).filter(f=>f.id!==id);
+  markDeleted('quickfood',id);
+  saveLocal();
+  renderQuickAdd();
+}
+
+// ─── FASTING ──────────────────────────────────────────────────────────────────
+// Two independent, fully personalisable features: a daily time-restricted eating
+// window (any length/start time, not locked to 18:6 or 16:8) and extended/periodic
+// fasts (24h/48h/72h/5 days or any custom length), with a simple history log.
+function timeStrToMins(t){const parts=(t||'12:00').split(':');return (+parts[0]||0)*60+(+parts[1]||0);}
+function minsOfDay(d){return d.getHours()*60+d.getMinutes();}
+function minsToTimeStr(mins){mins=((mins%1440)+1440)%1440;const h=Math.floor(mins/60),m=mins%60;const d=new Date();d.setHours(h,m,0,0);return d.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'});}
+function formatHM(ms){const totalMins=Math.max(0,Math.floor(ms/60000));const h=Math.floor(totalMins/60),m=totalMins%60;return h+'h '+m+'m';}
+
+function toggleFastWindowEnabled(){
+  if(!S.fasting)return;
+  S.fasting.windowEnabled=!S.fasting.windowEnabled;
+  saveLocal();
+  renderFastingTab();
+}
+function saveFastWindowSettings(){
+  const hEl=document.getElementById('fw-hours'),sEl=document.getElementById('fw-start');
+  if(!hEl||!sEl)return;
+  S.fasting.windowHours=Math.max(1,Math.min(23,+hEl.value||8));
+  S.fasting.windowStart=sEl.value||'12:00';
+  saveLocal();
+  renderFastingTab();
+}
+function updateFastWindowStatus(){
+  const f=S.fasting;
+  const card=document.getElementById('fw-status-card');
+  if(!card||!f||!f.windowEnabled)return;
+  const icon=document.getElementById('fw-status-icon'),label=document.getElementById('fw-status-label'),sub=document.getElementById('fw-status-sub');
+  const startMin=timeStrToMins(f.windowStart);
+  const winLen=Math.max(1,Math.min(23,+f.windowHours||8))*60;
+  const now=minsOfDay(new Date());
+  const rel=((now-startMin)%1440+1440)%1440;
+  card.classList.remove('eating','fasting-active');
+  if(rel<winLen){
+    const minsLeft=winLen-rel,closeMin=startMin+winLen;
+    card.classList.add('eating');
+    icon.textContent='🍽️';label.textContent='Eating window open';
+    sub.textContent=`Closes at ${minsToTimeStr(closeMin)} — ${Math.floor(minsLeft/60)}h ${minsLeft%60}m left`;
+  } else {
+    const minsUntilOpen=1440-rel;
+    card.classList.add('fasting-active');
+    icon.textContent='⏱️';label.textContent='Fasting';
+    sub.textContent=`Eating opens at ${minsToTimeStr(startMin)} — ${Math.floor(minsUntilOpen/60)}h ${minsUntilOpen%60}m to go`;
+  }
+}
+function startExtendedFast(hours){
+  if(!S.fasting)return;
+  if(S.fasting.current){alert('You already have an active fast running. End it first.');return;}
+  S.fasting.current={id:newId('fast'),startedAt:Date.now(),targetHours:hours};
+  saveLocal();
+  renderFastingTab();
+}
+function startCustomExtendedFast(){
+  const el=document.getElementById('ef-custom-hours');
+  const v=+((el&&el.value)||0);
+  if(!v||v<1){alert('Enter a number of hours.');return;}
+  startExtendedFast(Math.round(v));
+}
+function endExtendedFast(){
+  const cur=S.fasting&&S.fasting.current;
+  if(!cur)return;
+  const elapsedMs=Date.now()-cur.startedAt;
+  const elapsedHours=elapsedMs/3600000;
+  const completed=elapsedHours>=cur.targetHours*0.95;
+  S.fasting.log.push({id:cur.id,startedAt:cur.startedAt,endedAt:Date.now(),targetHours:cur.targetHours,actualHours:Math.round(elapsedHours*10)/10,completed,updatedAt:Date.now()});
+  S.fasting.current=null;
+  saveLocal();
+  renderFastingTab();
+  if(completed)alert(`🎉 Fast complete! You fasted for ${Math.round(elapsedHours*10)/10}h — nice work.`);
+}
+function renderExtendedFastUI(){
+  const idleEl=document.getElementById('ef-idle'),activeEl=document.getElementById('ef-active');
+  if(!idleEl)return;
+  const cur=S.fasting&&S.fasting.current;
+  if(cur){
+    idleEl.classList.add('hidden');activeEl.classList.remove('hidden');
+    const elapsedMs=Date.now()-cur.startedAt,elapsedHours=elapsedMs/3600000;
+    const pct=Math.min(elapsedHours/cur.targetHours*100,100);
+    const ring=document.getElementById('ef-ring');
+    if(ring)ring.style.strokeDashoffset=326.7*(1-pct/100);
+    document.getElementById('ef-elapsed').textContent=formatHM(elapsedMs);
+    document.getElementById('ef-target').textContent='of '+cur.targetHours+'h';
+    const remainingMs=Math.max(0,cur.targetHours*3600000-elapsedMs);
+    document.getElementById('ef-eta').textContent = remainingMs>0 ? formatHM(remainingMs)+' to go' : "Target reached — keep going or end it whenever you're ready";
+  } else {
+    idleEl.classList.remove('hidden');activeEl.classList.add('hidden');
+  }
+}
+function renderFastHistory(){
+  const el=document.getElementById('ef-history');
+  if(!el||!S.fasting)return;
+  const log=[...(S.fasting.log||[])].sort((a,b)=>b.startedAt-a.startedAt).slice(0,15);
+  if(!log.length){el.innerHTML='No fasts logged yet.';return;}
+  el.innerHTML=log.map(e=>{
+    const dateStr=new Date(e.startedAt).toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+    return `<div class="fast-hist-row"><span>${e.completed?'✅':'⏹️'} ${dateStr} — ${e.actualHours}h (target ${e.targetHours}h)</span></div>`;
+  }).join('');
+}
+function renderFastingTab(){
+  if(!S.fasting)return;
+  const toggle=document.getElementById('fw-toggle');
+  if(!toggle)return; // fasting tab not in the DOM yet
+  const on=!!S.fasting.windowEnabled;
+  toggle.classList.toggle('done',on);
+  toggle.textContent=on?'✓':'';
+  const cfg=document.getElementById('fw-config');
+  if(cfg)cfg.classList.toggle('hidden',!on);
+  if(on){
+    document.getElementById('fw-hours').value=S.fasting.windowHours;
+    document.getElementById('fw-start').value=S.fasting.windowStart;
+    const fastLen=24-(+S.fasting.windowHours||8);
+    document.getElementById('fw-summary').textContent=`${fastLen}h fast / ${S.fasting.windowHours}h eat — window opens at ${S.fasting.windowStart}`;
+    updateFastWindowStatus();
+  }
+  renderExtendedFastUI();
+  renderFastHistory();
+}
 
 // ─── TEXT MACRO LOOKUP ────────────────────────────────────────────────────────
 async function doLookup(){
@@ -1225,7 +1561,7 @@ async function doLookup(){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         model:'claude-sonnet-4-6',max_tokens:300,
-        messages:[{role:'user',content:`Estimate macros for: "${q}". This is for a ${profileDescriptor()}. Cooked weight assumed unless stated otherwise. Return ONLY valid JSON, no other text: {"name":"descriptive food name with quantity","cal":number,"pro":number,"fat":number,"carb":number,"emoji":"one relevant emoji","note":"one brief sentence — confidence level or key assumption e.g. cooked weight assumed"}`}]
+        messages:[{role:'user',content:`Estimate macros for: "${q}". This is for a ${profileDescriptor()}. Cooked weight assumed unless stated otherwise. Return ONLY valid JSON, no other text: {"name":"descriptive food name with quantity","cal":number,"pro":number,"fat":number,"carb":number,"fib":number,"emoji":"one relevant emoji","note":"one brief sentence — confidence level or key assumption e.g. cooked weight assumed"}`}]
       })
     });
     const data=await resp.json();
@@ -1234,7 +1570,7 @@ async function doLookup(){
     lookupPending=meal;
     loading.classList.add('hidden');
     document.getElementById('lr-name').textContent=meal.emoji+' '+meal.name;
-    document.getElementById('lr-macros').innerHTML=`<span class="tag">🔥 ${meal.cal} cal</span><span class="tag" style="background:#ECFDF5;color:#10B981">💪 ${meal.pro}g protein</span><span class="tag" style="background:#FFFBEB;color:#F59E0B">🥑 ${meal.fat}g fat</span><span class="tag" style="background:#EFF6FF;color:#3B82F6">🍝 ${meal.carb}g carbs</span>`;
+    document.getElementById('lr-macros').innerHTML=`<span class="tag">🔥 ${meal.cal} cal</span><span class="tag" style="background:#ECFDF5;color:#10B981">💪 ${meal.pro}g protein</span><span class="tag" style="background:#FFFBEB;color:#F59E0B">🥑 ${meal.fat}g fat</span><span class="tag" style="background:#EFF6FF;color:#3B82F6">🍝 ${meal.carb}g carbs</span><span class="tag" style="background:#F3E8FF;color:#9333EA">🌾 ${meal.fib||0}g fiber</span>`;
     document.getElementById('lr-note').textContent=meal.note;
     result.style.display='block';
   }catch(e){
@@ -1253,6 +1589,7 @@ function editLookup(){
   document.getElementById('m-pro').value=lookupPending.pro;
   document.getElementById('m-fat').value=lookupPending.fat;
   document.getElementById('m-carb').value=lookupPending.carb;
+  document.getElementById('m-fib').value=lookupPending.fib||0;
   document.getElementById('lookup-result').style.display='none';
   document.getElementById('lookup-input').value='';
   document.getElementById('m-food').scrollIntoView({behavior:'smooth'});
@@ -1275,7 +1612,7 @@ async function handleMealPhoto(event){
           model:'claude-sonnet-4-6',max_tokens:400,
           messages:[{role:'user',content:[
             {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
-            {type:'text',text:`Analyse this meal photo for a ${profileDescriptor()}, ${S.profile?S.profile.protein:150}g daily protein target. Cooked weight assumed. Return ONLY valid JSON: {"name":"meal description","cal":number,"pro":number,"fat":number,"carb":number,"emoji":"one emoji","note":"confidence note or key assumption"}`}
+            {type:'text',text:`Analyse this meal photo for a ${profileDescriptor()}, ${S.profile?S.profile.protein:150}g daily protein target. Cooked weight assumed. Return ONLY valid JSON: {"name":"meal description","cal":number,"pro":number,"fat":number,"carb":number,"fib":number,"emoji":"one emoji","note":"confidence note or key assumption"}`}
           ]}]
         })
       });
@@ -1285,7 +1622,7 @@ async function handleMealPhoto(event){
       const clean=text.replace(/```json\n?|```/g,'').trim();
       const meal=JSON.parse(clean);
       loading.classList.add('hidden');
-      result.innerHTML=`<div style="padding:8px 0"><div style="font-size:14px;font-weight:700;margin-bottom:6px">${meal.emoji} ${meal.name}</div><div style="margin-bottom:6px"><span class="tag">🔥 ${meal.cal} cal</span><span class="tag" style="background:#ECFDF5;color:#10B981">💪 ${meal.pro}g protein</span><span class="tag" style="background:#FFFBEB;color:#F59E0B">🥑 ${meal.fat}g fat</span><span class="tag" style="background:#EFF6FF;color:#3B82F6">🍝 ${meal.carb}g carbs</span></div><div style="font-size:12px;color:var(--muted);margin-bottom:10px">${meal.note}</div><button class="btn btn-primary btn-sm" style="width:auto;margin-right:8px" onclick='logPhotoMeal(${JSON.stringify(meal)})'>Add to today ✓</button><button class="btn btn-secondary btn-sm" style="width:auto" onclick="document.getElementById('ph-preview').classList.add('hidden')">Cancel</button></div>`;
+      result.innerHTML=`<div style="padding:8px 0"><div style="font-size:14px;font-weight:700;margin-bottom:6px">${meal.emoji} ${meal.name}</div><div style="margin-bottom:6px"><span class="tag">🔥 ${meal.cal} cal</span><span class="tag" style="background:#ECFDF5;color:#10B981">💪 ${meal.pro}g protein</span><span class="tag" style="background:#FFFBEB;color:#F59E0B">🥑 ${meal.fat}g fat</span><span class="tag" style="background:#EFF6FF;color:#3B82F6">🍝 ${meal.carb}g carbs</span><span class="tag" style="background:#F3E8FF;color:#9333EA">🌾 ${meal.fib||0}g fiber</span></div><div style="font-size:12px;color:var(--muted);margin-bottom:10px">${meal.note}</div><button class="btn btn-primary btn-sm" style="width:auto;margin-right:8px" onclick='logPhotoMeal(${JSON.stringify(meal)})'>Add to today ✓</button><button class="btn btn-secondary btn-sm" style="width:auto" onclick="document.getElementById('ph-preview').classList.add('hidden')">Cancel</button></div>`;
     }catch(e){
       loading.classList.add('hidden');
       result.innerHTML=`<div style="color:var(--muted);font-size:13px;padding:8px 0">
@@ -1800,7 +2137,65 @@ Peptides/compounds in use: ${peptideLines||'none'}.
 
 Today so far: ${Math.round(t.cal)} cal, ${Math.round(t.pro)}g protein (goal ${p.protein||'--'}g), ${Math.round(t.fat)}g fat, ${Math.round(t.carb)}g carbs, ${getWaterTotal()}ml water.
 
-Be direct, practical, plain English, warm and encouraging. Protein target is a top priority for preserving/building muscle. Cooked weight is the default assumption for meat. Do not assume any medical conditions or allergies unless ${firstName()} tells you about them directly in this conversation.`;
+Be direct, practical, plain English, warm and encouraging. Protein target is a top priority for preserving/building muscle. Cooked weight is the default assumption for meat. Do not assume any medical conditions or allergies unless ${firstName()} tells you about them directly in this conversation.
+
+${ACTION_PROTOCOL}`;
+}
+
+// ─── CHAT ACTIONS (lets the assistant write to the tracker, not just read it) ────────────
+// Instructs the model on how to write back to the tracker via chat, and defines the exact
+// wire format the client parses out of the reply to actually perform the write.
+const ACTION_PROTOCOL=`If they clearly and explicitly ask you to log/add/record/track something (a meal, water, weight, steps/movement, or sleep), do it by including an action block in your reply — don't just tell them to go add it themselves. Format, one per item, anywhere in your reply:
+[ACTION:log_meal]{"name":"...","cal":N,"pro":N,"fat":N,"carb":N,"fib":N,"emoji":"one emoji"}[/ACTION]
+[ACTION:log_water]{"ml":N}[/ACTION]
+[ACTION:log_weight]{"weight":N}[/ACTION]
+[ACTION:log_movement]{"steps":N,"calBurned":N}[/ACTION]
+[ACTION:log_sleep]{"total":N,"deep":N,"rem":N,"notes":"..."}[/ACTION]
+(total/deep/rem in hours/minutes respectively, matching how they're entered elsewhere in the app.)
+Estimate macros for a described meal the same way you would for a normal food lookup — reasonable confidence is fine, cooked weight assumed, fiber optional if you can't estimate it confidently (use 0). Only emit an action block when they have actually asked you to log something, never just because food or activity was mentioned in passing. If what they want logged is too vague to estimate at all, ask a clarifying question instead of guessing wildly. You can emit more than one action block if they've asked to log several things at once. Keep your normal reply text short when you've logged something — a brief natural confirmation is enough, the app will also show its own confirmation.`;
+function chatLogWeight(w){
+  if(!w)return;
+  const entry={id:newId('w'),updatedAt:Date.now(),date:viewDateStr(),weight:w};
+  const idx=S.weights.findIndex(e=>new Date(e.date)>new Date(entry.date));
+  if(idx===-1)S.weights.push(entry);else S.weights.splice(idx,0,entry);
+  if(S.weights.length>90)S.weights=S.weights.slice(-90);
+  saveLocal();updateWeight();
+}
+function chatLogMovement(steps,calBurned){
+  const existing=movementForDate(viewDateStr());
+  if(existing){existing.steps=steps||existing.steps;existing.calBurned=calBurned||existing.calBurned;existing.updatedAt=Date.now();}
+  else{S.movement.push({id:newId('movement'),updatedAt:Date.now(),date:viewDateStr(),steps:steps||0,calBurned:calBurned||0});}
+  saveLocal();updateMovement();updateTrafficLight();
+}
+function chatLogSleep(total,deep,rem,notes){
+  if(!total)return;
+  const existing=sleepForDate(viewDateStr());
+  if(existing){existing.total=total;existing.deep=deep||0;existing.rem=rem||0;existing.notes=notes||existing.notes;existing.updatedAt=Date.now();}
+  else{S.sleep.unshift({id:newId('sleep'),updatedAt:Date.now(),date:viewDateStr(),total,deep:deep||0,rem:rem||0,notes:notes||''});if(S.sleep.length>30)S.sleep=S.sleep.slice(0,30);}
+  saveLocal();updateSleepView();renderSleepHistory();
+}
+function executeChatAction(type,data){
+  try{
+    switch(type){
+      case 'log_meal':
+        addMeal({name:data.name||'Logged via chat',cal:+data.cal||0,pro:+data.pro||0,fat:+data.fat||0,carb:+data.carb||0,fib:+data.fib||0,emoji:data.emoji||'🍽️'});
+        return `✅ Logged: ${data.emoji||'🍽️'} ${data.name} — ${Math.round(+data.cal||0)} cal, ${Math.round(+data.pro||0)}g protein`;
+      case 'log_water':
+        addWater(+data.ml||0);
+        return `✅ Logged: 💧 ${+data.ml||0}ml water`;
+      case 'log_weight':
+        chatLogWeight(+data.weight||0);
+        return `✅ Logged: ⚖️ ${data.weight}kg`;
+      case 'log_movement':
+        chatLogMovement(+data.steps||0,+data.calBurned||0);
+        return `✅ Logged: 🏃 ${data.steps||0} steps, ${data.calBurned||0} cal burned`;
+      case 'log_sleep':
+        chatLogSleep(+data.total||0,+data.deep||0,+data.rem||0,data.notes||'');
+        return `✅ Logged: 😴 ${data.total}h sleep`;
+      default:
+        return null;
+    }
+  }catch(e){console.error('chat action error',e);return '⚠️ Tried to log that but something went wrong — add it manually to be safe.';}
 }
 async function sendChat(imgB64,imgType){
   const input=document.getElementById('chat-in'),text=input.value.trim();
@@ -1813,9 +2208,19 @@ async function sendChat(imgB64,imgType){
     const msgs=[{role:'user',content:'System: '+buildSys()},{role:'assistant',content:'Ready to help.'},...chatHistory];
     const resp=await fetch('https://josh-tracker-proxy.joe-shwa-smith.workers.dev',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:800,messages:msgs})});
     const data=await resp.json();
-    const reply=data.content.filter(c=>c.type==='text').map(c=>c.text).join('');
-    loading.remove();appendMsg('ai',reply);chatHistory.push({role:'assistant',content:reply});
+    let reply=data.content.filter(c=>c.type==='text').map(c=>c.text).join('');
+    // Parse and execute any action blocks, then strip them from what's actually shown
+    const actionRegex=/\[ACTION:(\w+)\](\{[\s\S]*?\})\[\/ACTION\]/g;
+    const confirmations=[];let m;
+    while((m=actionRegex.exec(reply))!==null){
+      try{const parsed=JSON.parse(m[2]);const conf=executeChatAction(m[1],parsed);if(conf)confirmations.push(conf);}
+      catch(err){console.error('action parse error',err);}
+    }
+    let cleanReply=reply.replace(actionRegex,'').trim();
+    if(confirmations.length)cleanReply=(cleanReply?cleanReply+'\n\n':'')+confirmations.join('\n');
+    loading.remove();appendMsg('ai',cleanReply);chatHistory.push({role:'assistant',content:cleanReply});
     if(chatHistory.length>20)chatHistory=chatHistory.slice(-20);
+    if(confirmations.length)updateTrafficLight();
   }catch(e){loading.remove();appendMsg('ai',"Can't connect right now. Try again.");}
   document.getElementById('chat-btn').disabled=false;
 }
@@ -1823,7 +2228,7 @@ async function handleChatPhoto(event){const file=event.target.files[0];if(!file)
 function appendMsg(role,text){const msgs=document.getElementById('chat-msgs'),now=new Date().toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'}),d=document.createElement('div');d.className='msg msg-'+(role==='user'?'user':'ai');d.innerHTML=`<div class="msg-bubble">${text.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')}</div><div class="msg-time">${now}</div>`;msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;return d;}
 function appendLoading(){const msgs=document.getElementById('chat-msgs'),d=document.createElement('div');d.className='msg msg-ai';d.innerHTML='<div class="msg-bubble"><div class="dots"><span></span><span></span><span></span></div></div>';msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;return d;}
 
-function updateAll(){updateMacros();updateWater();updateMealsList();updateWeight();updateMovement();updateTrafficLight();renderSupps();renderPeptides();updateSleepView();renderSleepHistory();}
+function updateAll(){updateMacros();updateWater();updateMealsList();updateWeight();updateMovement();updateTrafficLight();renderSupps();renderPeptides();updateSleepView();renderSleepHistory();renderFastingTab();}
 
 function addProteinShake(){
   const protein=+document.getElementById('pp-protein').value||23;
@@ -1970,6 +2375,12 @@ async function loadFromDrive(){
         S.meals = mergeById(S.meals, driveData.meals, 'meal').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
         S.water = mergeById(S.water, driveData.water, 'water').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
         S.movement = mergeById(S.movement, driveData.movement, 'movement');
+        S.quickFoods = mergeById(S.quickFoods, driveData.quickFoods, 'quickfood');
+        if(driveData.fasting){
+          if(!S.fasting)S.fasting={windowEnabled:false,windowHours:8,windowStart:'12:00',current:null,log:[]};
+          S.fasting.log = mergeById(S.fasting.log, driveData.fasting.log, 'fast').sort((a,b)=>(b.startedAt||0)-(a.startedAt||0));
+          if(!S.fasting.current && driveData.fasting.current) S.fasting.current = driveData.fasting.current;
+        }
         if(driveData.streak && driveData.streak.log){
           if(!S.streak)S.streak={count:0,longest:0,log:[]};
           S.streak.log = mergeById(S.streak.log, driveData.streak.log, 'streak_log');
