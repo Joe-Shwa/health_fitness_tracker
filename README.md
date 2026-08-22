@@ -33,6 +33,20 @@ It's a single self-contained HTML file: `generic_tracker_v1.html`. Open it in a 
 
 **8. Settings tab — full profile + macro breakdown.** Tap the ⚙️ in the header. It now shows: editable name/sex/age/height, goal type + goal weight + activity level with a "Recalculate targets" button, a plain-English explanation of *why* your macros are what they are (see the card under "Your Macro Targets" — this is generated from the same formula, not a separate AI call, so it's instant and always consistent with your actual numbers), the colour-scheme picker, and the existing tab visibility toggles.
 
+## The Drive sync bug — same problem, found and fixed
+
+Quick note: the file you said you attached with your fixes didn't actually come through on my end — I built this from your written description alone, so if you want me to check for closer parity with what you did on the other four apps, send that diff through and I'll compare.
+
+I checked this build's Drive sync code and it had the exact same two defects you described, ported straight over:
+
+- **`findOrCreateDriveFile()`** never checked whether its search request actually succeeded. On an expired/invalid token, Google's API returns a 401 with an error body, not `{files:[...]}` — so `searchData.files` came back `undefined`, the code read that as "no file found," and quietly created a brand-new empty file, pointing the app at that instead of the real one. Confirmed with a test that mocks a 401 on that call: before the fix this would have spun up a blank file; now it throws and disconnects cleanly instead.
+- **`syncToDrive()`** never checked whether its upload actually succeeded — it called `updateSyncUI('synced')` unconditionally after the `fetch`, so a dead token would show "✅ Drive synced" while nothing was actually being saved. Confirmed with a test that mocks a failing upload: the indicator now correctly shows disconnected instead of a false "synced."
+
+Fixed the same way you did on the others:
+- Every Drive call (`findOrCreateDriveFile`, `loadFromDrive`, `syncToDrive`) now checks `response.ok`. A confirmed 401/403 runs a new `handleDriveAuthFailure()` — clears the token, marks the connection dead, updates the UI — instead of silently working around it. A non-auth failure (offline, a blip) leaves the token in place so the next attempt can just retry without forcing a full re-auth.
+- `findOrCreateDriveFile()` now requests `modifiedTime` and, if it finds more than one file with the same name (a leftover from the old bug), picks the most recently modified one instead of a random first match. Tested with three mocked duplicate files — it correctly resolved to the newest.
+- A persistent **"ever linked" flag** (`localStorage`, survives token clearing) is set the first time Drive connects successfully. On every load, if that flag is set but there's no live connection, a red banner appears across the top — "⚠️ Drive disconnected — your entries aren't backing up" — with Reconnect and Dismiss buttons. It never shows for someone who hasn't linked Drive in the first place. One design call worth flagging: Dismiss only mutes the banner for the current session — it reappears on the next full reload if the connection is still dead, rather than being silenced permanently, so a real ongoing problem can't get dismissed once and then forgotten. Let me know if you'd rather it stayed dismissed for good.
+
 ## v2 refinements (from Lauren's first-look feedback)
 
 **9. Quick Add is now personal.** It used to be a fixed list of generic staples. Now it's an editable list, seeded with those same staples on first run — tap "➕ Add food" to save your own regularly-eaten items (name, calories, protein, fat, carbs, fiber, a serving description and an emoji), and any item you added yourself gets a small ✕ to remove it. The seeded defaults can't be removed, only your own additions — keeps the list from being accidentally emptied out.
