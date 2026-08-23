@@ -889,6 +889,19 @@ function migrateState(){
   if(!S.meals)S.meals=[];
   if(!S.water)S.water=[];
   migrateArr(S.weights,'w');
+  // Collapse duplicate weight entries for the same date — a past bug in logWeight()/chatLogWeight()
+  // created a new row every time instead of updating the existing one for that day. Keep whichever
+  // duplicate has the newest updatedAt.
+  {
+    const byDate=new Map();
+    S.weights.forEach(w=>{
+      const cur=byDate.get(w.date);
+      if(!cur || (w.updatedAt||0) > (cur.updatedAt||0)) byDate.set(w.date, w);
+    });
+    if(byDate.size < S.weights.length){
+      S.weights = [...byDate.values()].sort((a,b)=>new Date(a.date)-new Date(b.date));
+    }
+  }
   migrateArr(S.sleep,'sleep');
   migrateArr(S.meals,'meal','date');
   migrateArr(S.water,'water','date');
@@ -1647,9 +1660,15 @@ function logPhotoMeal(m){addMeal(m);document.getElementById('ph-preview').classL
 // ─── WEIGHT ───────────────────────────────────────────────────────────────────
 function logWeight(){
   const w=parseFloat(document.getElementById('w-input').value);if(!w)return;
-  const entry={id:newId('w'),updatedAt:Date.now(),date:viewDateStr(),weight:w};
-  const idx=S.weights.findIndex(e=>new Date(e.date)>new Date(entry.date));
-  if(idx===-1)S.weights.push(entry);else S.weights.splice(idx,0,entry);
+  const dateStr=viewDateStr();
+  const existing=weightForDate(dateStr);
+  if(existing){
+    existing.weight=w; existing.updatedAt=Date.now();
+  } else {
+    const entry={id:newId('w'),updatedAt:Date.now(),date:dateStr,weight:w};
+    const idx=S.weights.findIndex(e=>new Date(e.date)>new Date(entry.date));
+    if(idx===-1)S.weights.push(entry);else S.weights.splice(idx,0,entry);
+  }
   if(S.weights.length>90)S.weights=S.weights.slice(-90);
   saveLocal();updateWeight();document.getElementById('w-input').value='';
 }
@@ -1678,7 +1697,7 @@ function updateWeight(){
   const rem=latest-goal;
   document.getElementById('prog-txt').textContent=Math.abs(rem)<0.05?'🎉 Goal reached!':rem>0?rem.toFixed(1)+' kg to goal':Math.abs(rem).toFixed(1)+' kg past goal';
   document.getElementById('w-advice').innerHTML=rem>0.05?`At ~0.4kg/week, roughly <strong>${Math.round(rem/0.4)} weeks</strong> to reach ${goal}kg.`:`🏆 Goal reached.`;
-  document.getElementById('w-history').innerHTML=[...S.weights].reverse().slice(0,10).map(e=>`<div class="history-row"><span>${e.date}</span><span style="font-weight:700">${e.weight} kg</span></div>`).join('')||'No entries yet.';
+  document.getElementById('w-history').innerHTML=[...S.weights].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,10).map(e=>`<div class="history-row"><span>${e.date}</span><span style="font-weight:700">${e.weight} kg</span></div>`).join('')||'No entries yet.';
 }
 
 // ─── SLEEP ────────────────────────────────────────────────────────────────────
@@ -1758,7 +1777,8 @@ function fmtHM(decHrs){const t=minsToHM(decHrs*60);return (t.h?t.h+'h ':'')+t.m+
 function fmtMins(mins){const t=minsToHM(mins);return (t.h?t.h+'h ':'')+t.m+'m';}
 function renderSleepHistory(){
   const el=document.getElementById('sl-history');if(!el)return;
-  el.innerHTML=S.sleep.slice(0,7).map(sl=>`<div class="history-row"><span style="color:var(--muted)">${sl.date}${sl.notes?' · '+sl.notes:''}</span><span>${fmtHM(sl.total)} · ${fmtMins(sl.deep)} deep · ${fmtMins(sl.rem)} REM <span class="meal-del" style="font-size:15px" onclick="editSleep('${sl.id}')" title="Edit">✎</span><span class="meal-del" style="font-size:15px" onclick="delSleep('${sl.id}')" title="Delete">×</span></span></div>`).join('')||'No entries yet.';
+  const recent=S.sleep.filter(sl=>isWithinLastNDays(sl.date,7)).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  el.innerHTML=recent.map(sl=>`<div class="history-row"><span style="color:var(--muted)">${sl.date}${sl.notes?' · '+sl.notes:''}</span><span>${fmtHM(sl.total)} · ${fmtMins(sl.deep)} deep · ${fmtMins(sl.rem)} REM <span class="meal-del" style="font-size:15px" onclick="editSleep('${sl.id}')" title="Edit">✎</span><span class="meal-del" style="font-size:15px" onclick="delSleep('${sl.id}')" title="Delete">×</span></span></div>`).join('')||'No entries in the last 7 days.';
 }
 
 // ─── MOVEMENT ─────────────────────────────────────────────────────────────────
@@ -1788,8 +1808,9 @@ function updateMovement(){
   if(cbEl)cbEl.textContent=today?today.calBurned.toLocaleString():'--';
   const hist=document.getElementById('mv-history');
   if(hist){
-    hist.innerHTML=[...S.movement].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,10)
-      .map(m=>`<div class="history-row"><span style="color:var(--muted)">${m.date}</span><span>${m.steps.toLocaleString()} steps · ${m.calBurned.toLocaleString()} cal burned <span class="meal-del" style="font-size:15px" onclick="delMovement('${m.id}')">×</span></span></div>`).join('')||'No entries yet.';
+    const recent=S.movement.filter(m=>isWithinLastNDays(m.date,7)).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    hist.innerHTML=recent
+      .map(m=>`<div class="history-row"><span style="color:var(--muted)">${m.date}</span><span>${m.steps.toLocaleString()} steps · ${m.calBurned.toLocaleString()} cal burned <span class="meal-del" style="font-size:15px" onclick="delMovement('${m.id}')">×</span></span></div>`).join('')||'No entries in the last 7 days.';
   }
 }
 
@@ -1919,6 +1940,14 @@ function dismissWelcome(){document.getElementById('welcome-overlay').classList.a
 let viewingDate=new Date();
 function viewDateStr(){return viewingDate.toDateString();}
 function isViewingToday(){return viewDateStr()===new Date().toDateString();}
+// True calendar rolling window (today back N-1 days) — not "last N entries", so a gap in logging
+// doesn't pull in stale entries from weeks ago to pad out the list.
+function isWithinLastNDays(dateStr,n){
+  const d=new Date(dateStr); if(isNaN(d))return false;
+  d.setHours(0,0,0,0);
+  const cutoff=new Date(); cutoff.setHours(0,0,0,0); cutoff.setDate(cutoff.getDate()-(n-1));
+  return d>=cutoff;
+}
 function navDate(delta){
   viewingDate.setDate(viewingDate.getDate()+delta);
   const today=new Date();
@@ -2164,9 +2193,15 @@ const ACTION_PROTOCOL=`If they clearly and explicitly ask you to log/add/record/
 Estimate macros for a described meal the same way you would for a normal food lookup — reasonable confidence is fine, cooked weight assumed, fiber optional if you can't estimate it confidently (use 0). Only emit an action block when they have actually asked you to log something, never just because food or activity was mentioned in passing. If what they want logged is too vague to estimate at all, ask a clarifying question instead of guessing wildly. You can emit more than one action block if they've asked to log several things at once. Keep your normal reply text short when you've logged something — a brief natural confirmation is enough, the app will also show its own confirmation.`;
 function chatLogWeight(w){
   if(!w)return;
-  const entry={id:newId('w'),updatedAt:Date.now(),date:viewDateStr(),weight:w};
-  const idx=S.weights.findIndex(e=>new Date(e.date)>new Date(entry.date));
-  if(idx===-1)S.weights.push(entry);else S.weights.splice(idx,0,entry);
+  const dateStr=viewDateStr();
+  const existing=weightForDate(dateStr);
+  if(existing){
+    existing.weight=w; existing.updatedAt=Date.now();
+  } else {
+    const entry={id:newId('w'),updatedAt:Date.now(),date:dateStr,weight:w};
+    const idx=S.weights.findIndex(e=>new Date(e.date)>new Date(entry.date));
+    if(idx===-1)S.weights.push(entry);else S.weights.splice(idx,0,entry);
+  }
   if(S.weights.length>90)S.weights=S.weights.slice(-90);
   saveLocal();updateWeight();
 }
@@ -2318,8 +2353,16 @@ function removeSupp(id){
 const GOOGLE_CLIENT_ID = '93450585738-k7hsn3fjsu69sigcktdfftfcsjk91qcu.apps.googleusercontent.com';
 const DRIVE_FILE_NAME = 'generic-tracker-data.json';
 const DRIVE_TOKEN_KEY = 'generic_tracker_drive_token';
+const DRIVE_REFRESH_KEY = 'generic_tracker_drive_refresh_token';
+const DRIVE_EXPIRY_KEY = 'generic_tracker_drive_token_expiry';
 const DRIVE_EVER_LINKED_KEY = 'generic_tracker_drive_ever_linked';
+// TODO: replace with your deployed drive-token-worker URL (no trailing slash) —
+// the same Worker your other apps use works fine here too, no need for a separate one.
+const DRIVE_AUTH_WORKER = 'https://drive-token-worker.joe-shwa-smith.workers.dev';
+
 let driveAccessToken = null;
+let driveRefreshToken = null;
+let driveTokenExpiry = 0; // epoch ms
 let driveFileId = null;
 let driveConnected = false; // true only once a Drive call has actually succeeded this session
 let driveBannerDismissedThisSession = false;
@@ -2333,28 +2376,38 @@ function updateDriveBanner(){
 }
 function dismissDriveBanner(){ driveBannerDismissedThisSession=true; updateDriveBanner(); }
 function reconnectDrive(){ driveBannerDismissedThisSession=false; initGoogleAuth(); }
-// Called on a confirmed 401/403 only — never on a network blip, so a temporary connectivity
-// hiccup doesn't force a full re-auth. This is the one place that tears the connection down.
+// Called only when refresh itself fails (refresh token is genuinely dead — revoked, 6mo unused,
+// or the Testing-mode 7-day cap) — clears everything and shows the banner, since silent recovery
+// is no longer possible at that point.
 function handleDriveAuthFailure(){
   driveAccessToken=null;
+  driveRefreshToken=null;
   driveFileId=null;
   driveConnected=false;
   localStorage.removeItem(DRIVE_TOKEN_KEY);
+  localStorage.removeItem(DRIVE_REFRESH_KEY);
+  localStorage.removeItem(DRIVE_EXPIRY_KEY);
   updateSyncUI('disconnected');
   updateDriveBanner();
 }
 
+// Code flow (popup) instead of the old token flow — this is what makes a refresh_token possible.
+// prompt:'consent' forces Google to re-issue a refresh_token even for someone who already granted
+// access under the old token-only flow (Google otherwise skips it on repeat consent).
 function initGoogleAuth(){
   if(typeof google === 'undefined') return;
-  google.accounts.oauth2.initTokenClient({
+  google.accounts.oauth2.initCodeClient({
     client_id: GOOGLE_CLIENT_ID,
     scope: 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file',
+    ux_mode: 'popup',
+    access_type: 'offline',
+    prompt: 'consent',
     callback: async (response) => {
-      if(response.error) { console.error('Auth error:', response.error); return; }
-      driveAccessToken = response.access_token;
-      localStorage.setItem(DRIVE_TOKEN_KEY, driveAccessToken);
-      updateSyncUI('syncing');
+      if(response.error) { console.error('Auth error:', response.error); updateSyncUI('error'); return; }
       try{
+        const tokens = await exchangeCodeForTokens(response.code);
+        applyNewTokens(tokens);
+        updateSyncUI('syncing');
         await findOrCreateDriveFile();
         await loadFromDrive();
         driveConnected=true;
@@ -2365,36 +2418,100 @@ function initGoogleAuth(){
         const setupOverlay=document.getElementById('setup-overlay');
         if(setupOverlay && !setupOverlay.classList.contains('hidden')){ nextSetup(3); }
       }catch(e){
-        // A 401/403 already ran handleDriveAuthFailure() inside findOrCreateDriveFile();
-        // anything else (network blip) is left as a retryable error, token intact.
         console.error('Drive connect failed:', e);
-        if(driveAccessToken) updateSyncUI('error');
+        updateSyncUI('error');
+        alert('Drive connect failed:\n'+e.message);
       }
     }
-  }).requestAccessToken();
+  }).requestCode();
+}
+
+async function exchangeCodeForTokens(code){
+  let resp;
+  try{
+    resp = await fetch(DRIVE_AUTH_WORKER+'/exchange', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({code})
+    });
+  }catch(networkErr){
+    throw new Error('exchange-network-failed: '+networkErr.message);
+  }
+  if(!resp.ok){
+    let detail='';
+    try{ const body=await resp.json(); detail=body.error||JSON.stringify(body); }catch(e){ detail='(no JSON body)'; }
+    throw new Error('exchange-failed ('+resp.status+'): '+detail);
+  }
+  return resp.json(); // {access_token, refresh_token, expires_in}
+}
+
+function applyNewTokens(tokens){
+  driveAccessToken = tokens.access_token;
+  driveTokenExpiry = Date.now() + (tokens.expires_in*1000) - 60000; // 1min safety margin
+  localStorage.setItem(DRIVE_TOKEN_KEY, driveAccessToken);
+  localStorage.setItem(DRIVE_EXPIRY_KEY, String(driveTokenExpiry));
+  if(tokens.refresh_token){
+    driveRefreshToken = tokens.refresh_token;
+    localStorage.setItem(DRIVE_REFRESH_KEY, driveRefreshToken);
+  }
+  markDriveEverLinked();
+}
+
+// Silently trades the refresh token for a new access token — no popup, no user interaction. This
+// is what lets the app reconnect on its own after days/weeks away.
+async function refreshAccessToken(){
+  if(!driveRefreshToken) throw new Error('no-refresh-token');
+  const resp = await fetch(DRIVE_AUTH_WORKER+'/refresh', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({refresh_token: driveRefreshToken})
+  });
+  if(!resp.ok) throw new Error('refresh-token-dead');
+  const data = await resp.json();
+  driveAccessToken = data.access_token;
+  driveTokenExpiry = Date.now() + (data.expires_in*1000) - 60000;
+  localStorage.setItem(DRIVE_TOKEN_KEY, driveAccessToken);
+  localStorage.setItem(DRIVE_EXPIRY_KEY, String(driveTokenExpiry));
+  return driveAccessToken;
+}
+
+async function ensureDriveToken(){
+  if(driveAccessToken && Date.now() < driveTokenExpiry) return driveAccessToken;
+  return refreshAccessToken();
+}
+
+// Wraps every Drive API call: ensures a live token, and on a 401/403 mid-flight tries one silent
+// refresh-and-retry before giving up.
+async function driveApiFetch(url, options={}, attempt=0){
+  await ensureDriveToken();
+  const headers = Object.assign({}, options.headers, {'Authorization':'Bearer '+driveAccessToken});
+  const resp = await fetch(url, Object.assign({}, options, {headers}));
+  if((resp.status===401 || resp.status===403) && attempt < 2){
+    await refreshAccessToken();
+    return driveApiFetch(url, options, attempt+1);
+  }
+  return resp;
 }
 
 function handleSyncClick(){
-  if(driveAccessToken){ fullSync(); }
+  if(driveAccessToken || driveRefreshToken){ fullSync(); }
   else { initGoogleAuth(); }
 }
 
 async function fullSync(){
-  if(!driveAccessToken || !driveFileId){ initGoogleAuth(); return; }
+  if(!driveRefreshToken && !driveAccessToken){ initGoogleAuth(); return; }
   updateSyncUI('syncing');
-  await loadFromDrive();
-  await syncToDrive();
+  try{
+    if(!driveFileId) await findOrCreateDriveFile();
+    await loadFromDrive();
+    await syncToDrive();
+  }catch(e){
+    console.error('Full sync failed:', e);
+    if(e.message==='refresh-token-dead'||e.message==='no-refresh-token') handleDriveAuthFailure();
+    else updateSyncUI('error');
+  }
 }
 
 async function findOrCreateDriveFile(){
-  const searchResp = await fetch(
-    'https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D%22'+DRIVE_FILE_NAME+'%22&fields=files(id,name,modifiedTime)',
-    {headers:{'Authorization':'Bearer '+driveAccessToken}}
+  const searchResp = await driveApiFetch(
+    'https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D%22'+DRIVE_FILE_NAME+'%22&fields=files(id,name,modifiedTime)'
   );
-  if(!searchResp.ok){
-    if(searchResp.status===401||searchResp.status===403) handleDriveAuthFailure();
-    throw new Error('Drive file search failed: '+searchResp.status);
-  }
   const searchData = await searchResp.json();
   if(searchData.files && searchData.files.length > 0){
     // If duplicate files with this name exist (a leftover from the old bug spinning up extra
@@ -2403,31 +2520,20 @@ async function findOrCreateDriveFile(){
     const sorted=[...searchData.files].sort((a,b)=>new Date(b.modifiedTime)-new Date(a.modifiedTime));
     driveFileId = sorted[0].id;
   } else {
-    const createResp = await fetch('https://www.googleapis.com/drive/v3/files',{
+    const createResp = await driveApiFetch('https://www.googleapis.com/drive/v3/files',{
       method:'POST',
-      headers:{'Authorization':'Bearer '+driveAccessToken,'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify({name:DRIVE_FILE_NAME,parents:['appDataFolder']})
     });
-    if(!createResp.ok){
-      if(createResp.status===401||createResp.status===403) handleDriveAuthFailure();
-      throw new Error('Drive file create failed: '+createResp.status);
-    }
     const createData = await createResp.json();
     driveFileId = createData.id;
   }
 }
 
 async function loadFromDrive(){
-  if(!driveAccessToken || !driveFileId) return;
+  if(!driveFileId) return;
   try{
-    const resp = await fetch(
-      'https://www.googleapis.com/drive/v3/files/'+driveFileId+'?alt=media',
-      {headers:{'Authorization':'Bearer '+driveAccessToken}}
-    );
-    if(!resp.ok){
-      if(resp.status===401||resp.status===403) handleDriveAuthFailure();
-      return; // never merge from a failed read — local data is left untouched either way
-    }
+    const resp = await driveApiFetch('https://www.googleapis.com/drive/v3/files/'+driveFileId+'?alt=media');
     {
       driveConnected=true; updateDriveBanner();
       const text = await resp.text();
@@ -2470,11 +2576,14 @@ async function loadFromDrive(){
         applyTabSettings();
       }
     }
-  }catch(e){ console.error('Load from Drive error:', e); }
+  }catch(e){
+    console.error('Load from Drive error:', e);
+    if(e.message==='refresh-token-dead') handleDriveAuthFailure();
+  }
 }
 
 async function syncToDrive(){
-  if(!driveAccessToken || !driveFileId){ initGoogleAuth(); return; }
+  if(!driveFileId){ if(driveRefreshToken||driveAccessToken){ await findOrCreateDriveFile(); } else { initGoogleAuth(); return; } }
   updateSyncUI('syncing');
   try{
     const data = JSON.stringify({
@@ -2496,23 +2605,18 @@ async function syncToDrive(){
       tombstones: S.tombstones,
       lastSync: new Date().toISOString()
     });
-    const resp = await fetch(
+    const resp = await driveApiFetch(
       'https://www.googleapis.com/upload/drive/v3/files/'+driveFileId+'?uploadType=media',
-      {method:'PATCH', headers:{'Authorization':'Bearer '+driveAccessToken,'Content-Type':'application/json'}, body:data}
+      {method:'PATCH', headers:{'Content-Type':'application/json'}, body:data}
     );
-    if(!resp.ok){
-      // This is the exact bug: the old code never checked this response, so a dead token
-      // still resulted in "✅ Drive synced" being shown even though nothing was saved.
-      if(resp.status===401||resp.status===403){ handleDriveAuthFailure(); }
-      else { updateSyncUI('error'); }
-      return;
-    }
+    if(!resp.ok){ updateSyncUI('error'); return; }
     driveConnected=true;
     updateDriveBanner();
     updateSyncUI('synced');
   }catch(e){
     console.error('Drive sync error:', e);
-    updateSyncUI('error');
+    if(e.message==='refresh-token-dead') handleDriveAuthFailure();
+    else updateSyncUI('error');
   }
 }
 
@@ -2525,33 +2629,38 @@ function updateSyncUI(state){
   else { el.textContent='☁️ Connect Drive'; el.style.background='rgba(255,255,255,0.15)'; }
 }
 
+// On load: restore whatever we have and let ensureDriveToken() silently refresh as needed — this
+// reconnects invisibly even after weeks away, no popup required.
 window.addEventListener('load', ()=>{
+  driveRefreshToken = localStorage.getItem(DRIVE_REFRESH_KEY);
   const savedToken = localStorage.getItem(DRIVE_TOKEN_KEY);
-  if(savedToken){
-    driveAccessToken = savedToken;
+  const savedExpiry = +localStorage.getItem(DRIVE_EXPIRY_KEY) || 0;
+  if(savedToken && savedExpiry){
+    driveAccessToken = savedToken; driveTokenExpiry = savedExpiry;
+  } else if(savedToken){
+    // A token with no recorded expiry is a leftover from the old (pre-refresh-token) auth flow —
+    // it can't be silently refreshed, so don't trust it. Clear it and require one real reconnect.
+    localStorage.removeItem(DRIVE_TOKEN_KEY);
+  }
+  if(driveRefreshToken || driveAccessToken){
     findOrCreateDriveFile().then(()=>{
       return loadFromDrive();
     }).then(()=>{
       driveConnected=true;
       updateDriveBanner();
       updateSyncUI('synced');
-    }).catch(()=>{
-      // findOrCreateDriveFile() already called handleDriveAuthFailure() itself if this was a
-      // genuine 401/403 (clearing the token and flipping to a real disconnected state). For
-      // anything else — offline, a blip — the saved token is left alone so the next load can
-      // just retry instead of forcing a full re-auth.
-      updateDriveBanner();
+    }).catch((e)=>{
+      if(e.message==='refresh-token-dead'||e.message==='no-refresh-token') handleDriveAuthFailure();
+      else updateDriveBanner();
     });
   } else {
-    // No saved token on this device/browser at all. If it was ever linked before (elsewhere,
-    // or here before a token got cleared), the banner still needs to show — a dead link
-    // shouldn't go unnoticed just because there's nothing locally to even attempt a call with.
+    // Never linked, or fully signed out — if a Drive account was linked before, flag it prominently
     updateDriveBanner();
   }
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && driveAccessToken && driveFileId) {
+  if (document.visibilityState === 'visible' && (driveAccessToken || driveRefreshToken) && driveFileId) {
     loadFromDrive();
   }
 });
