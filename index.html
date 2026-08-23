@@ -596,6 +596,7 @@ select.input-field { appearance: auto; }
       <div class="lr-note" id="lr-note"></div>
       <button class="btn btn-primary btn-sm" style="width:auto" onclick="addFromLookup()">Add to today ✓</button>
       <button class="btn btn-secondary btn-sm" style="width:auto;margin-left:8px" onclick="editLookup()">Edit first</button>
+      <button class="btn btn-secondary btn-sm" style="width:auto;margin-left:8px" onclick="saveAsQuickFood(lookupPending)">⭐ Quick Add</button>
     </div>
   </div>
 
@@ -605,6 +606,13 @@ select.input-field { appearance: auto; }
     <div class="form-group">
       <div class="input-label">Food name</div>
       <input class="input-field" id="m-food" placeholder="e.g. Steak 180g + 3 boiled eggs">
+      <input type="file" id="m-photo-camera" accept="image/*" capture="environment" class="hidden" onchange="handleManualPhoto(event)">
+      <input type="file" id="m-photo-gallery" accept="image/*" class="hidden" onchange="handleManualPhoto(event)">
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <span class="qa-btn" style="flex:1;padding:8px 6px;font-size:11px" onclick="document.getElementById('m-photo-camera').click()">📷 Photo → fill fields</span>
+        <span class="qa-btn" style="flex:1;padding:8px 6px;font-size:11px" onclick="document.getElementById('m-photo-gallery').click()">🖼️ From gallery</span>
+      </div>
+      <div id="m-photo-loading" class="hidden" style="text-align:center;padding:10px"><div class="dots"><span></span><span></span><span></span></div></div>
     </div>
     <div class="macro-fields">
       <div class="macro-field-wrap"><div class="input-label">Cal</div><input class="input-field" id="m-cal" type="number" placeholder="0"></div>
@@ -614,6 +622,7 @@ select.input-field { appearance: auto; }
       <div class="macro-field-wrap hidden" id="mf-fiber"><div class="input-label">Fiber g</div><input class="input-field" id="m-fib" type="number" placeholder="0"></div>
     </div>
     <button class="btn btn-primary" id="m-save-btn" onclick="addManual()">Add to today</button>
+    <button class="btn btn-secondary btn-sm" style="width:auto;margin-top:8px" onclick="saveManualAsQuickFood()">⭐ Save to Quick Add</button>
     <button class="btn btn-secondary btn-sm hidden" id="m-cancel-btn" style="width:auto;margin-top:8px" onclick="cancelMealEdit()">Cancel edit</button>
   </div>
 
@@ -889,9 +898,6 @@ function migrateState(){
   if(!S.meals)S.meals=[];
   if(!S.water)S.water=[];
   migrateArr(S.weights,'w');
-  // Collapse duplicate weight entries for the same date — a past bug in logWeight()/chatLogWeight()
-  // created a new row every time instead of updating the existing one for that day. Keep whichever
-  // duplicate has the newest updatedAt.
   {
     const byDate=new Map();
     S.weights.forEach(w=>{
@@ -904,10 +910,6 @@ function migrateState(){
   }
   migrateArr(S.sleep,'sleep');
   migrateArr(S.meals,'meal','date');
-  migrateArr(S.water,'water','date');
-  // Normalise any macro/water values that were ever saved as strings (an older schema, a bad
-  // sync merge, an AI response that quoted a number) back to real numbers — see the comment on
-  // totalsForDate for why leaving these as strings silently breaks totals via concatenation.
   S.meals.forEach(m=>{m.cal=+m.cal||0;m.pro=+m.pro||0;m.fat=+m.fat||0;m.carb=+m.carb||0;m.fib=+m.fib||0;});
   S.water.forEach(w=>{w.ml=+w.ml||0;});
   if(!S.movement)S.movement=[];
@@ -926,7 +928,6 @@ function migrateState(){
   migrateArr(S.peptideLogs,'pep_log');
   if(!S.peptideChecks)S.peptideChecks={};
   S.peptides.forEach(p=>{if(p.tracking==='checklist'&&!(p.id in S.peptideChecks))S.peptideChecks[p.id]=false;});
-  // Quick Add: seed from the default list on first run, then it's the user's own editable list
   if(!S.quickFoods){
     S.quickFoods=QUICK_FOODS_SEED.map(f=>({...f,id:newId('qf'),custom:false,updatedAt:Date.now()}));
   }
@@ -957,11 +958,6 @@ const SUPPS = [
 ];
 
 // ─── MACRO ENGINE ───────────────────────────────────────────────────────────────
-// Mifflin-St Jeor BMR (sex-specific) x activity multiplier = maintenance calories.
-// Goal type adjusts calories from maintenance; protein is set per kg of current
-// bodyweight (higher on a cut to protect muscle); fat is a sex-aware percentage
-// of calories (women get a higher floor to support hormonal health); carbs fill
-// the remainder.
 const ACTIVITY_MULT = {sedentary:1.2, light:1.375, moderate:1.55, active:1.725, very_active:1.9};
 const ACTIVITY_LABEL = {sedentary:'sedentary', light:'lightly active', moderate:'moderately active', active:'active', very_active:'very active'};
 function computeMacros(p){
@@ -980,7 +976,7 @@ function computeMacros(p){
   const fat = Math.round((cals*fatPct)/9);
   const carbs = Math.max(50,Math.round((cals-protein*4-fat*9)/4));
   const water = Math.round((weight/30)*1000);
-  const fiber = Math.round((cals/1000)*14); // ~14g per 1000kcal — standard dietary-guideline benchmark
+  const fiber = Math.round((cals/1000)*14);
   return {cals,protein,fat,carbs,water,fiber,bmr:Math.round(bmr),tdee:Math.round(tdee),proteinPerKg,fatPct};
 }
 function macroExplanation(p,m){
@@ -1046,7 +1042,6 @@ function showApp(){
   renderFastingTab();
 }
 function firstName(){return (S.profile&&S.profile.name)?S.profile.name.split(' ')[0]:'there';}
-// Builds a short, generic profile descriptor used in AI prompts instead of any hardcoded personal details
 function profileDescriptor(){
   const p=S.profile||{};
   return `${p.age||'adult'}yo ${p.sex==='female'?'female':'male'}, ${p.height||'--'}cm, ~${(S.weights&&S.weights.length)?S.weights[S.weights.length-1].weight:(p.current||'--')}kg`;
@@ -1288,12 +1283,6 @@ function waterForDate(dateStr){return S.water.filter(w=>w.date===dateStr);}
 function movementForDate(dateStr){return S.movement.find(m=>m.date===dateStr)||null;}
 function sleepForDate(dateStr){return S.sleep.find(s=>s.date===dateStr)||null;}
 function weightForDate(dateStr){return S.weights.find(w=>w.date===dateStr)||null;}
-// Coerced with unary + rather than plain (m.fat||0): if a value is ever stored as a string
-// (an AI response that quoted a number, an older/imported entry, a bad sync merge) plain "+"
-// on a string does JS string concatenation, not addition — e.g. 0 + "20" + "30" = "020" then
-// "02030" instead of 50. That mismatch is exactly what caused the runaway Fat numbers (things
-// like "2830g") in the personal build. Coercing every read here makes totals self-healing even
-// against data that was already saved with the wrong type, not just new entries going forward.
 function totalsForDate(dateStr){return mealsForDate(dateStr).reduce((a,m)=>({cal:a.cal+(+m.cal||0),pro:a.pro+(+m.pro||0),fat:a.fat+(+m.fat||0),carb:a.carb+(+m.carb||0),fib:a.fib+(+m.fib||0)}),{cal:0,pro:0,fat:0,carb:0,fib:0});}
 function waterTotalForDate(dateStr){return waterForDate(dateStr).reduce((a,w)=>a+(+w.ml||0),0);}
 
@@ -1352,11 +1341,6 @@ function updateMealsList(){
   }).join('');
 }
 function delMeal(id){if(mealEditId===id)cancelMealEdit();S.meals=S.meals.filter(m=>m.id!==id);markDeleted('meal',id);saveLocal();updateAll();}
-// Every logging path (manual entry, Quick Add, text/photo AI lookup, chat actions, protein
-// shake) funnels through here, so this is the one place that needs to guarantee cal/pro/fat/
-// carb/fib are actually numbers before they're saved — an AI reply that quotes a number as
-// "28" instead of 28 would otherwise sit in storage as a string and silently concatenate
-// instead of add the next time totals are summed. Coercing on the way in stops that at the source.
 function addMeal(m){S.meals.push({...m,cal:+m.cal||0,pro:+m.pro||0,fat:+m.fat||0,carb:+m.carb||0,fib:+m.fib||0,id:newId('meal'),date:viewDateStr(),updatedAt:Date.now(),time:new Date().toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'})});saveLocal();updateAll();}
 function addManual(){
   const name=document.getElementById('m-food').value;if(!name)return;
@@ -1391,8 +1375,6 @@ function cancelMealEdit(){
   document.getElementById('m-cancel-btn').classList.add('hidden');
   ['m-food','m-cal','m-pro','m-fat','m-carb','m-fib'].forEach(id=>document.getElementById(id).value='');
 }
-// Shows/hides Fat, Carbs and Fiber inputs (manual entry) and rings (Today) per Settings > Tracked Nutrients.
-// Calories and Protein are always tracked — the day-status/streak logic depends on them.
 function applyNutrientSettings(){
   const nut=(S.settings&&S.settings.nutrients)||{fat:true,carb:true,fiber:false};
   const mfFat=document.getElementById('mf-fat'),mfCarb=document.getElementById('mf-carb'),mfFib=document.getElementById('mf-fiber');
@@ -1404,8 +1386,6 @@ function applyNutrientSettings(){
   if(miCarb)miCarb.classList.toggle('hidden',!nut.carb);
   if(miFib)miFib.classList.toggle('hidden',!nut.fiber);
 }
-// Quick Add is now a personal, editable list (S.quickFoods) — items are looked up by id,
-// not array index, since the user can add/remove entries and indices would shift underneath them.
 function renderQuickAdd(){
   const list=S.quickFoods||[];
   document.getElementById('qa-grid').innerHTML=list.map(f=>`
@@ -1413,7 +1393,7 @@ function renderQuickAdd(){
       <div class="qa-btn" onclick="${f.qty?'showQtyPicker(\''+f.id+'\')':'addQuick(\''+f.id+'\')'}"><span class="qa-icon">${f.i||'🍽️'}</span><span class="qa-name">${f.n}</span><span class="qa-p">${f.p}g protein</span></div>
       ${f.custom?`<button class="qa-remove" title="Remove from Quick Add" onclick="event.stopPropagation();removeQuickFood('${f.id}')">✕</button>`:''}
     </div>`).join('')
-    +`<div class="qa-btn qa-add-btn" onclick="showAddQuickFood()"><span class="qa-icon">➕</span><span class="qa-name">Add food</span><span class="qa-p">your own</span></div>`;
+    +`<div class="qa-btn qa-add-btn" onclick="scrollToQuickAddSource()"><span class="qa-icon">➕</span><span class="qa-name">Add food</span><span class="qa-p">your own</span></div>`;
 }
 function findQuickFood(id){return (S.quickFoods||[]).find(f=>f.id===id);}
 function showQtyPicker(id){
@@ -1427,22 +1407,85 @@ function addQuick(id){
   const f=findQuickFood(id);if(!f)return;
   addMeal({name:f.n+(f.a?' ('+f.a+')':''),cal:f.c,pro:f.p,fat:f.f||0,carb:f.cb||0,fib:f.fb||0,emoji:f.i});
 }
-// "+ Add food" — lets the user save one of their own regularly-eaten items to Quick Add.
-function showAddQuickFood(){
-  const name=prompt('Food name (e.g. "Oat bowl"):');
-  if(!name||!name.trim())return;
-  const cal=prompt('Calories per serving:','0');
-  if(cal===null||isNaN(cal))return;
-  const pro=prompt('Protein (g) per serving:','0');
-  if(pro===null||isNaN(pro))return;
-  const fat=prompt('Fat (g) per serving (optional):','0');
-  const carb=prompt('Carbs (g) per serving (optional):','0');
-  const fiber=prompt('Fiber (g) per serving (optional):','0');
-  const amount=prompt('Serving description, e.g. "1 bowl" (optional):','')||'';
-  const emoji=prompt('Pick an emoji for it (optional):','🍽️')||'🍽️';
-  S.quickFoods.push({id:newId('qf'),n:name.trim(),i:emoji.trim()||'🍽️',c:Math.round(+cal)||0,p:Math.round(+pro)||0,f:Math.round(+fat)||0,cb:Math.round(+carb)||0,fb:Math.round(+fiber)||0,a:amount.trim(),custom:true,updatedAt:Date.now()});
-  saveLocal();
-  renderQuickAdd();
+// Generic saver — used by the Photo/Lookup/Manual "⭐ Quick Add" buttons. Takes a meal-shaped
+// object ({name,cal,pro,fat,carb,fib,emoji}) and stores it as a reusable Quick Add item WITHOUT
+// also logging it to today. Note the field-name bridge: meal objects use `fib` for fiber but
+// this app's quickFoods items use `fb` (matching its existing schema).
+function saveAsQuickFood(meal){
+  if(!meal || !meal.name || !String(meal.name).trim()){ alert('Add a food name first (in Manual Entry, or run a photo/lookup above).'); return; }
+  const name=String(meal.name).trim();
+  const dup=(S.quickFoods||[]).some(f=>f.n.toLowerCase()===name.toLowerCase());
+  if(dup && !confirm('"'+name+'" is already in Quick Add. Add it again as a duplicate?'))return;
+  S.quickFoods.push({
+    id:newId('qf'), n:name, i:meal.emoji||'🍽️',
+    c:Math.round(+meal.cal||0), p:Math.round(+meal.pro||0), f:Math.round(+meal.fat||0),
+    cb:Math.round(+meal.carb||0), fb:Math.round(+meal.fib||0),
+    a:'', custom:true, updatedAt:Date.now()
+  });
+  saveLocal();renderQuickAdd();
+  alert('⭐ Added "'+name+'" to Quick Add.');
+}
+// Reads the current Manual Entry field values and saves them as a Quick Add item — doesn't touch
+// today's log, so it's safe to use whether or not you've also hit "Add to today".
+function saveManualAsQuickFood(){
+  const name=document.getElementById('m-food').value;
+  saveAsQuickFood({
+    name,
+    cal:document.getElementById('m-cal').value,
+    pro:document.getElementById('m-pro').value,
+    fat:document.getElementById('m-fat').value,
+    carb:document.getElementById('m-carb').value,
+    fib:document.getElementById('m-fib').value
+  });
+}
+// Same AI vision call as handleMealPhoto, but writes the result straight into the Manual Entry
+// fields (instead of building an "Add to today" card) so it can be reviewed/edited before either
+// logging it or saving it to Quick Add.
+async function handleManualPhoto(event){
+  const file=event.target.files[0];if(!file)return;
+  const loading=document.getElementById('m-photo-loading');
+  loading.classList.remove('hidden');
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    try{
+      const b64=e.target.result.split(',')[1];
+      const resp=await fetch('https://josh-tracker-proxy.joe-shwa-smith.workers.dev',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-6',max_tokens:400,
+          messages:[{role:'user',content:[
+            {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
+            {type:'text',text:`Analyse this meal photo for a ${profileDescriptor()}, ${S.profile?S.profile.protein:150}g daily protein target. Cooked weight assumed. Return ONLY valid JSON: {"name":"meal description","cal":number,"pro":number,"fat":number,"carb":number,"fib":number,"emoji":"one emoji","note":"confidence note or key assumption"}`}
+          ]}]
+        })
+      });
+      const data=await resp.json();
+      if(data.error){throw new Error(data.error.message);}
+      const text=data.content.filter(c=>c.type==='text').map(c=>c.text).join('');
+      const clean=text.replace(/```json\n?|```/g,'').trim();
+      const meal=JSON.parse(clean);
+      document.getElementById('m-food').value=meal.name||'';
+      document.getElementById('m-cal').value=Math.round(+meal.cal||0);
+      document.getElementById('m-pro').value=Math.round(+meal.pro||0);
+      document.getElementById('m-fat').value=Math.round(+meal.fat||0);
+      document.getElementById('m-carb').value=Math.round(+meal.carb||0);
+      document.getElementById('m-fib').value=Math.round(+meal.fib||0);
+      loading.classList.add('hidden');
+      document.getElementById('m-food').scrollIntoView({behavior:'smooth',block:'center'});
+    }catch(e){
+      loading.classList.add('hidden');
+      alert("Couldn't analyse this photo. Try the Look Up Macros section instead, or fill in the fields manually.");
+    }
+  };
+  reader.readAsDataURL(file);event.target.value='';
+}
+// "+ Add food" now just points to Manual Entry — that's the single place to create a custom
+// Quick Add item (fill fields by hand, photo, or lookup, then hit "⭐ Save to Quick Add").
+function scrollToQuickAddSource(){
+  showTab('log',document.querySelector('.nav-tab[onclick*="\'log\'"]'));
+  const el=document.getElementById('m-food');
+  if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.focus(); }
 }
 function removeQuickFood(id){
   if(!confirm('Remove this from your Quick Add list?'))return;
@@ -1453,9 +1496,6 @@ function removeQuickFood(id){
 }
 
 // ─── FASTING ──────────────────────────────────────────────────────────────────
-// Two independent, fully personalisable features: a daily time-restricted eating
-// window (any length/start time, not locked to 18:6 or 16:8) and extended/periodic
-// fasts (24h/48h/72h/5 days or any custom length), with a simple history log.
 function timeStrToMins(t){const parts=(t||'12:00').split(':');return (+parts[0]||0)*60+(+parts[1]||0);}
 function minsOfDay(d){return d.getHours()*60+d.getMinutes();}
 function minsToTimeStr(mins){mins=((mins%1440)+1440)%1440;const h=Math.floor(mins/60),m=mins%60;const d=new Date();d.setHours(h,m,0,0);return d.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'});}
@@ -1553,7 +1593,7 @@ function renderFastHistory(){
 function renderFastingTab(){
   if(!S.fasting)return;
   const toggle=document.getElementById('fw-toggle');
-  if(!toggle)return; // fasting tab not in the DOM yet
+  if(!toggle)return;
   const on=!!S.fasting.windowEnabled;
   toggle.classList.toggle('done',on);
   toggle.textContent=on?'✓':'';
@@ -1644,7 +1684,7 @@ async function handleMealPhoto(event){
       const clean=text.replace(/```json\n?|```/g,'').trim();
       const meal=JSON.parse(clean);
       loading.classList.add('hidden');
-      result.innerHTML=`<div style="padding:8px 0"><div style="font-size:14px;font-weight:700;margin-bottom:6px">${meal.emoji} ${meal.name}</div><div style="margin-bottom:6px"><span class="tag">🔥 ${meal.cal} cal</span><span class="tag" style="background:#ECFDF5;color:#10B981">💪 ${meal.pro}g protein</span><span class="tag" style="background:#FFFBEB;color:#F59E0B">🥑 ${meal.fat}g fat</span><span class="tag" style="background:#EFF6FF;color:#3B82F6">🍝 ${meal.carb}g carbs</span><span class="tag" style="background:#F3E8FF;color:#9333EA">🌾 ${meal.fib||0}g fiber</span></div><div style="font-size:12px;color:var(--muted);margin-bottom:10px">${meal.note}</div><button class="btn btn-primary btn-sm" style="width:auto;margin-right:8px" onclick='logPhotoMeal(${JSON.stringify(meal)})'>Add to today ✓</button><button class="btn btn-secondary btn-sm" style="width:auto" onclick="document.getElementById('ph-preview').classList.add('hidden')">Cancel</button></div>`;
+      result.innerHTML=`<div style="padding:8px 0"><div style="font-size:14px;font-weight:700;margin-bottom:6px">${meal.emoji} ${meal.name}</div><div style="margin-bottom:6px"><span class="tag">🔥 ${meal.cal} cal</span><span class="tag" style="background:#ECFDF5;color:#10B981">💪 ${meal.pro}g protein</span><span class="tag" style="background:#FFFBEB;color:#F59E0B">🥑 ${meal.fat}g fat</span><span class="tag" style="background:#EFF6FF;color:#3B82F6">🍝 ${meal.carb}g carbs</span><span class="tag" style="background:#F3E8FF;color:#9333EA">🌾 ${meal.fib||0}g fiber</span></div><div style="font-size:12px;color:var(--muted);margin-bottom:10px">${meal.note}</div><button class="btn btn-primary btn-sm" style="width:auto;margin-right:8px" onclick='logPhotoMeal(${JSON.stringify(meal)})'>Add to today ✓</button><button class="btn btn-secondary btn-sm" style="width:auto;margin-right:8px" onclick='saveAsQuickFood(${JSON.stringify(meal)})'>⭐ Quick Add</button><button class="btn btn-secondary btn-sm" style="width:auto" onclick="document.getElementById('ph-preview').classList.add('hidden')">Cancel</button></div>`;
     }catch(e){
       loading.classList.add('hidden');
       result.innerHTML=`<div style="color:var(--muted);font-size:13px;padding:8px 0">
@@ -1940,8 +1980,6 @@ function dismissWelcome(){document.getElementById('welcome-overlay').classList.a
 let viewingDate=new Date();
 function viewDateStr(){return viewingDate.toDateString();}
 function isViewingToday(){return viewDateStr()===new Date().toDateString();}
-// True calendar rolling window (today back N-1 days) — not "last N entries", so a gap in logging
-// doesn't pull in stale entries from weeks ago to pad out the list.
 function isWithinLastNDays(dateStr,n){
   const d=new Date(dateStr); if(isNaN(d))return false;
   d.setHours(0,0,0,0);
@@ -2181,8 +2219,6 @@ ${ACTION_PROTOCOL}`;
 }
 
 // ─── CHAT ACTIONS (lets the assistant write to the tracker, not just read it) ────────────
-// Instructs the model on how to write back to the tracker via chat, and defines the exact
-// wire format the client parses out of the reply to actually perform the write.
 const ACTION_PROTOCOL=`If they clearly and explicitly ask you to log/add/record/track something (a meal, water, weight, steps/movement, or sleep), do it by including an action block in your reply — don't just tell them to go add it themselves. Format, one per item, anywhere in your reply:
 [ACTION:log_meal]{"name":"...","cal":N,"pro":N,"fat":N,"carb":N,"fib":N,"emoji":"one emoji"}[/ACTION]
 [ACTION:log_water]{"ml":N}[/ACTION]
@@ -2253,7 +2289,6 @@ async function sendChat(imgB64,imgType){
     const resp=await fetch('https://josh-tracker-proxy.joe-shwa-smith.workers.dev',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:800,messages:msgs})});
     const data=await resp.json();
     let reply=data.content.filter(c=>c.type==='text').map(c=>c.text).join('');
-    // Parse and execute any action blocks, then strip them from what's actually shown
     const actionRegex=/\[ACTION:(\w+)\](\{[\s\S]*?\})\[\/ACTION\]/g;
     const confirmations=[];let m;
     while((m=actionRegex.exec(reply))!==null){
@@ -2340,31 +2375,19 @@ function removeSupp(id){
 }
 
 // ─── GOOGLE DRIVE SYNC ────────────────────────────────────────────────────────
-// Bug fix (ported from the same fix applied across the other trackers): an expired/invalid
-// token makes Drive's API return a 401/403 with an error body, not {files:[...]}. The old code
-// never checked response.ok before reading the body, so on a dead token findOrCreateDriveFile()
-// saw `searchData.files` as undefined, fell through to "no file found," and silently spun up a
-// brand-new empty file — pointing the app at that instead of the real data. Worse, syncToDrive()
-// never checked whether its upload actually succeeded, so the UI kept claiming "✅ Drive synced"
-// the whole time. Every Drive call below now checks response.ok, a confirmed 401/403 triggers a
-// real disconnected state (handleDriveAuthFailure) instead of quietly working around it, and a
-// persistent "ever linked" flag drives a banner that stays visible across reloads until the user
-// reconnects or dismisses it, so a dead connection can't go unnoticed the way it did before.
 const GOOGLE_CLIENT_ID = '93450585738-k7hsn3fjsu69sigcktdfftfcsjk91qcu.apps.googleusercontent.com';
 const DRIVE_FILE_NAME = 'generic-tracker-data.json';
 const DRIVE_TOKEN_KEY = 'generic_tracker_drive_token';
 const DRIVE_REFRESH_KEY = 'generic_tracker_drive_refresh_token';
 const DRIVE_EXPIRY_KEY = 'generic_tracker_drive_token_expiry';
 const DRIVE_EVER_LINKED_KEY = 'generic_tracker_drive_ever_linked';
-// TODO: replace with your deployed drive-token-worker URL (no trailing slash) —
-// the same Worker your other apps use works fine here too, no need for a separate one.
 const DRIVE_AUTH_WORKER = 'https://drive-token-worker.joe-shwa-smith.workers.dev';
 
 let driveAccessToken = null;
 let driveRefreshToken = null;
-let driveTokenExpiry = 0; // epoch ms
+let driveTokenExpiry = 0;
 let driveFileId = null;
-let driveConnected = false; // true only once a Drive call has actually succeeded this session
+let driveConnected = false;
 let driveBannerDismissedThisSession = false;
 
 function everLinkedDrive(){ return localStorage.getItem(DRIVE_EVER_LINKED_KEY)==='1'; }
@@ -2376,9 +2399,6 @@ function updateDriveBanner(){
 }
 function dismissDriveBanner(){ driveBannerDismissedThisSession=true; updateDriveBanner(); }
 function reconnectDrive(){ driveBannerDismissedThisSession=false; initGoogleAuth(); }
-// Called only when refresh itself fails (refresh token is genuinely dead — revoked, 6mo unused,
-// or the Testing-mode 7-day cap) — clears everything and shows the banner, since silent recovery
-// is no longer possible at that point.
 function handleDriveAuthFailure(){
   driveAccessToken=null;
   driveRefreshToken=null;
@@ -2391,9 +2411,6 @@ function handleDriveAuthFailure(){
   updateDriveBanner();
 }
 
-// Code flow (popup) instead of the old token flow — this is what makes a refresh_token possible.
-// prompt:'consent' forces Google to re-issue a refresh_token even for someone who already granted
-// access under the old token-only flow (Google otherwise skips it on repeat consent).
 function initGoogleAuth(){
   if(typeof google === 'undefined') return;
   google.accounts.oauth2.initCodeClient({
@@ -2440,12 +2457,12 @@ async function exchangeCodeForTokens(code){
     try{ const body=await resp.json(); detail=body.error||JSON.stringify(body); }catch(e){ detail='(no JSON body)'; }
     throw new Error('exchange-failed ('+resp.status+'): '+detail);
   }
-  return resp.json(); // {access_token, refresh_token, expires_in}
+  return resp.json();
 }
 
 function applyNewTokens(tokens){
   driveAccessToken = tokens.access_token;
-  driveTokenExpiry = Date.now() + (tokens.expires_in*1000) - 60000; // 1min safety margin
+  driveTokenExpiry = Date.now() + (tokens.expires_in*1000) - 60000;
   localStorage.setItem(DRIVE_TOKEN_KEY, driveAccessToken);
   localStorage.setItem(DRIVE_EXPIRY_KEY, String(driveTokenExpiry));
   if(tokens.refresh_token){
@@ -2455,8 +2472,6 @@ function applyNewTokens(tokens){
   markDriveEverLinked();
 }
 
-// Silently trades the refresh token for a new access token — no popup, no user interaction. This
-// is what lets the app reconnect on its own after days/weeks away.
 async function refreshAccessToken(){
   if(!driveRefreshToken) throw new Error('no-refresh-token');
   const resp = await fetch(DRIVE_AUTH_WORKER+'/refresh', {
@@ -2476,8 +2491,6 @@ async function ensureDriveToken(){
   return refreshAccessToken();
 }
 
-// Wraps every Drive API call: ensures a live token, and on a 401/403 mid-flight tries one silent
-// refresh-and-retry before giving up.
 async function driveApiFetch(url, options={}, attempt=0){
   await ensureDriveToken();
   const headers = Object.assign({}, options.headers, {'Authorization':'Bearer '+driveAccessToken});
@@ -2514,9 +2527,6 @@ async function findOrCreateDriveFile(){
   );
   const searchData = await searchResp.json();
   if(searchData.files && searchData.files.length > 0){
-    // If duplicate files with this name exist (a leftover from the old bug spinning up extra
-    // blank ones), use the most recently modified — most likely to hold real data — rather
-    // than a random first match.
     const sorted=[...searchData.files].sort((a,b)=>new Date(b.modifiedTime)-new Date(a.modifiedTime));
     driveFileId = sorted[0].id;
   } else {
@@ -2629,8 +2639,6 @@ function updateSyncUI(state){
   else { el.textContent='☁️ Connect Drive'; el.style.background='rgba(255,255,255,0.15)'; }
 }
 
-// On load: restore whatever we have and let ensureDriveToken() silently refresh as needed — this
-// reconnects invisibly even after weeks away, no popup required.
 window.addEventListener('load', ()=>{
   driveRefreshToken = localStorage.getItem(DRIVE_REFRESH_KEY);
   const savedToken = localStorage.getItem(DRIVE_TOKEN_KEY);
@@ -2638,8 +2646,6 @@ window.addEventListener('load', ()=>{
   if(savedToken && savedExpiry){
     driveAccessToken = savedToken; driveTokenExpiry = savedExpiry;
   } else if(savedToken){
-    // A token with no recorded expiry is a leftover from the old (pre-refresh-token) auth flow —
-    // it can't be silently refreshed, so don't trust it. Clear it and require one real reconnect.
     localStorage.removeItem(DRIVE_TOKEN_KEY);
   }
   if(driveRefreshToken || driveAccessToken){
@@ -2654,7 +2660,6 @@ window.addEventListener('load', ()=>{
       else updateDriveBanner();
     });
   } else {
-    // Never linked, or fully signed out — if a Drive account was linked before, flag it prominently
     updateDriveBanner();
   }
 });
