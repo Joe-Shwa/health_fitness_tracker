@@ -254,6 +254,14 @@ select.input-field { appearance: auto; }
 .dots span:nth-child(2) { animation-delay: .2s; }
 .dots span:nth-child(3) { animation-delay: .4s; }
 @keyframes bonce { 0%,80%,100%{transform:translateY(0);opacity:.4} 40%{transform:translateY(-6px);opacity:1} }
+
+/* MEASUREMENTS */
+.tip-icon { cursor: pointer; color: var(--blue); font-size: 13px; font-weight: 700; user-select: none; flex-shrink: 0; }
+.tip-text { font-size: 12px; color: var(--text); background: var(--blue-pale); border-radius: 8px; padding: 8px 10px; margin: 4px 0 8px; line-height: 1.5; }
+.collapsible-title { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.collapsible-chevron { font-size: 11px; color: var(--muted); transition: transform 0.2s; }
+.ms-side-row { display: flex; gap: 8px; margin-bottom: 4px; }
+.ms-side-row .input-label { font-size: 9px; }
 </style>
 </head>
 <body>
@@ -403,7 +411,7 @@ select.input-field { appearance: auto; }
   <div class="nav-tab" onclick="showTab('log',this)"><span class="ti">🍽️</span>Log</div>
   <div class="nav-tab" onclick="showTab('movement',this)"><span class="ti">🏃</span>Move</div>
   <div class="nav-tab" id="nav-fasting" onclick="showTab('fasting',this)"><span class="ti">⏱️</span>Fasting</div>
-  <div class="nav-tab" id="nav-weight" onclick="showTab('weight',this)"><span class="ti">⚖️</span>Weight</div>
+  <div class="nav-tab" id="nav-weight" onclick="showTab('weight',this)"><span class="ti">📏</span>Measure</div>
   <div class="nav-tab" id="nav-sleep" onclick="showTab('sleep',this)"><span class="ti">😴</span>Sleep</div>
   <div class="nav-tab" id="nav-supps" onclick="showTab('supps',this)"><span class="ti">💊</span>Supps</div>
   <div class="nav-tab" id="nav-peptides" onclick="showTab('peptides',this)"><span class="ti">🧬</span>Peptides</div>
@@ -750,6 +758,32 @@ select.input-field { appearance: auto; }
     <div id="w-advice" style="font-size:13px;color:var(--muted);line-height:1.6;margin-top:8px"></div>
   </div>
   <div class="card"><div class="card-title">History</div><div id="w-history" style="font-size:13px;color:var(--muted)">No entries yet.</div></div>
+
+  <!-- GENERAL MEASURING TIPS (collapsible) -->
+  <div class="card">
+    <div class="card-title collapsible-title" onclick="toggleGeneralTips()">
+      <span>📏 How &amp; When to Measure</span>
+      <span class="collapsible-chevron" id="gen-tips-chevron">▼ show</span>
+    </div>
+    <div id="general-tips-body" class="hidden" style="font-size:13px;color:var(--text);line-height:1.7">
+      <div style="margin-bottom:10px"><strong>Timing —</strong> same time of day, ideally morning before eating/drinking and after the toilet.</div>
+      <div style="margin-bottom:10px"><strong>Tape tension —</strong> snug but not compressing the skin. You should be able to slide a finger under it.</div>
+      <div style="margin-bottom:10px"><strong>Posture —</strong> don't hold your breath or flex for waist/hips — stand relaxed.</div>
+      <div style="margin-bottom:10px"><strong>Repeat &amp; average —</strong> take each spot twice and average if the numbers differ.</div>
+      <div style="margin-bottom:10px"><strong>Left vs right —</strong> for arms, forearms, thighs and calves, pick one side and stay consistent, or measure both and average — either works, just keep it the same way each time and note which you did below if it varies.</div>
+      <div style="margin-bottom:10px"><strong>Photos —</strong> front/side/back, same lighting and spot, monthly. Honestly as useful as the tape for tracking visible change.</div>
+      <div><strong>Frequency —</strong> every 2–4 weeks is plenty. Weekly is noise — measurements shift day to day with water/glycogen, same as weight does.</div>
+    </div>
+  </div>
+
+  <!-- BODY MEASUREMENTS -->
+  <div class="card">
+    <div class="card-title" id="ms-form-title">Log Body Measurements</div>
+    <div id="measurements-fields"></div>
+    <div class="form-group"><div class="input-label">Notes</div><input class="input-field" id="ms-notes" placeholder="e.g. one side only, post-workout pump"></div>
+    <button class="btn btn-primary" onclick="saveMeasurements()">Save measurements</button>
+  </div>
+  <div class="card"><div class="card-title">Measurement History</div><div id="measurements-history" style="font-size:13px;color:var(--muted)">No entries yet.</div></div>
 </div>
 
 <!-- SLEEP -->
@@ -845,6 +879,7 @@ let S = {
   movement: [],
   streak: { count: 0, longest: 0, log: [] },
   weights: [],
+  measurements: null,
   sleep: [],
   supps: {multi:false,vitd:false,omega3:false},
   supplements: null,
@@ -938,6 +973,8 @@ function migrateState(){
   if(!S.fasting.windowStart)S.fasting.windowStart='12:00';
   if(!S.fasting.log)S.fasting.log=[];
   migrateArr(S.fasting.log,'fast');
+  if(!S.measurements)S.measurements=[];
+  migrateArr(S.measurements,'ms','date');
 }
 
 const QUICK_FOODS_SEED = [
@@ -949,6 +986,20 @@ const QUICK_FOODS_SEED = [
   {n:"Cottage Cheese",i:"🧀",c:100,p:14,f:2,cb:5,fb:0,a:"150g"},
   {n:"Protein Shake",i:"🥤",c:130,p:25,f:2,cb:5,fb:1,a:"1 scoop"},
   {n:"Beef Mince",i:"🥩",c:250,p:26,f:15,cb:0,fb:0,a:"100g"},
+];
+
+// ─── MEASUREMENTS: field config (drives the form, tips, history summary) ──────
+// single fields store one value per date; paired (left/right) fields store `${key}_l` / `${key}_r`.
+const MEASURE_FIELDS = [
+  {key:'neck', label:'Neck', unit:'cm', single:true, tip:"Measure just below the larynx (Adam's apple), tape level and snug."},
+  {key:'chest', label:'Chest', unit:'cm', single:true, tip:'Fullest part of the chest, roughly nipple line, tape level around the body.'},
+  {key:'waist', label:'Waist', unit:'cm', single:true, tip:"At the navel, standing relaxed — don't suck in or hold your breath. This is the one most people mess up, usually by measuring too high or pulling the tape tight."},
+  {key:'hips', label:'Hips', unit:'cm', single:true, tip:'Widest part of the glutes, feet together.'},
+  {key:'belly', label:'Umbilical / Belly', unit:'cm', single:true, tip:'Same line as waist (at the navel) — tracked separately since it can shift independently of waist, e.g. bloating vs fat.'},
+  {key:'arm', label:'Upper Arm / Bicep', unit:'cm', single:false, tip:'Midpoint between shoulder and elbow. Flexed or relaxed both work — just pick one and stay consistent.'},
+  {key:'forearm', label:'Forearm', unit:'cm', single:false, tip:'Widest point of the forearm, relaxed.'},
+  {key:'thigh', label:'Thigh', unit:'cm', single:false, tip:'Widest point, roughly 15cm above the kneecap.'},
+  {key:'calf', label:'Calf', unit:'cm', single:false, tip:'Widest point, standing normally.'},
 ];
 
 const SUPPS = [
@@ -1006,6 +1057,7 @@ function applyTheme(theme){
 window.onload = () => {
   loadLocal(); updateDate(); renderQuickAdd(); checkDayReset();
   applyTheme(S.theme);
+  renderMeasurementsFieldsHtml();
   if(S.profile){showApp();renderViewDate();maybeShowWelcome();}
   renderChatGreeting();
   setInterval(()=>{updateFastWindowStatus();renderExtendedFastUI();},30000);
@@ -1050,7 +1102,7 @@ function profileDescriptor(){
 // ─── SETTINGS (which tabs are visible — Today/Log/Move always on) ────────────
 const OPTIONAL_TABS=[
   {key:'fasting',label:'⏱️ Fasting'},
-  {key:'weight',label:'⚖️ Weight'},
+  {key:'weight',label:'📏 Measurements'},
   {key:'sleep',label:'😴 Sleep'},
   {key:'supps',label:'💊 Supps'},
   {key:'peptides',label:'🧬 Peptides'},
@@ -1740,6 +1792,125 @@ function updateWeight(){
   document.getElementById('w-history').innerHTML=[...S.weights].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,10).map(e=>`<div class="history-row"><span>${e.date}</span><span style="font-weight:700">${e.weight} kg</span></div>`).join('')||'No entries yet.';
 }
 
+// ─── MEASUREMENTS ─────────────────────────────────────────────────────────────
+// Builds the dynamic form once from MEASURE_FIELDS — inline ⓘ tip per field, plus the
+// collapsible general-tips card wired up in the HTML already.
+function renderMeasurementsFieldsHtml(){
+  const wrap=document.getElementById('measurements-fields');
+  if(!wrap)return;
+  wrap.innerHTML=MEASURE_FIELDS.map(f=>{
+    const tipRow=`<div class="tip-text hidden" id="tip-${f.key}">💡 ${f.tip}</div>`;
+    const labelRow=`<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px"><div class="input-label" style="margin-bottom:0">${f.label} (${f.unit})</div><span class="tip-icon" onclick="toggleMeasureTip('${f.key}')" title="How to measure">ⓘ</span></div>`;
+    if(f.single){
+      return `<div class="form-group">${labelRow}<input class="input-field" id="ms-${f.key}" type="number" step="0.1" placeholder="0.0">${tipRow}</div>`;
+    }
+    return `<div class="form-group">${labelRow}<div class="ms-side-row">
+      <div style="flex:1"><div class="input-label">Left</div><input class="input-field" id="ms-${f.key}-l" type="number" step="0.1" placeholder="0.0"></div>
+      <div style="flex:1"><div class="input-label">Right</div><input class="input-field" id="ms-${f.key}-r" type="number" step="0.1" placeholder="0.0"></div>
+    </div>${tipRow}</div>`;
+  }).join('');
+}
+function toggleMeasureTip(key){
+  const el=document.getElementById('tip-'+key);
+  if(el)el.classList.toggle('hidden');
+}
+function toggleGeneralTips(){
+  const body=document.getElementById('general-tips-body');
+  const chev=document.getElementById('gen-tips-chevron');
+  if(!body)return;
+  const hidden=body.classList.toggle('hidden');
+  if(chev)chev.textContent=hidden?'▼ show':'▲ hide';
+}
+function measurementsForDate(dateStr){return (S.measurements||[]).find(m=>m.date===dateStr)||null;}
+function saveMeasurements(){
+  const entry={};
+  let any=false;
+  MEASURE_FIELDS.forEach(f=>{
+    if(f.single){
+      const el=document.getElementById('ms-'+f.key);
+      const v=el?el.value:'';
+      if(v!==''){entry[f.key]=+v;any=true;}
+    } else {
+      const lEl=document.getElementById('ms-'+f.key+'-l'),rEl=document.getElementById('ms-'+f.key+'-r');
+      const l=lEl?lEl.value:'',r=rEl?rEl.value:'';
+      if(l!==''){entry[f.key+'_l']=+l;any=true;}
+      if(r!==''){entry[f.key+'_r']=+r;any=true;}
+    }
+  });
+  if(!any){alert('Enter at least one measurement.');return;}
+  const notesEl=document.getElementById('ms-notes');
+  const notes=notesEl?notesEl.value:'';
+  const dateStr=viewDateStr();
+  if(!S.measurements)S.measurements=[];
+  const existing=measurementsForDate(dateStr);
+  if(existing){
+    Object.assign(existing,entry);
+    existing.notes=notes;
+    existing.updatedAt=Date.now();
+  } else {
+    S.measurements.push({id:newId('ms'),updatedAt:Date.now(),date:dateStr,notes,...entry});
+  }
+  saveLocal();
+  renderMeasurementsHistory();
+}
+// Paging to a past day (or reloading on today) shows whatever's already logged for that date,
+// same pattern as editing a past meal/sleep entry.
+function loadMeasurementsIntoForm(){
+  const dateStr=viewDateStr();
+  const existing=measurementsForDate(dateStr);
+  const titleEl=document.getElementById('ms-form-title');
+  if(titleEl)titleEl.textContent=isViewingToday()?'Log Body Measurements':'Log Measurements — '+viewingDate.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'});
+  MEASURE_FIELDS.forEach(f=>{
+    if(f.single){
+      const el=document.getElementById('ms-'+f.key);
+      if(el)el.value=(existing&&existing[f.key]!=null)?existing[f.key]:'';
+    } else {
+      const lEl=document.getElementById('ms-'+f.key+'-l'),rEl=document.getElementById('ms-'+f.key+'-r');
+      if(lEl)lEl.value=(existing&&existing[f.key+'_l']!=null)?existing[f.key+'_l']:'';
+      if(rEl)rEl.value=(existing&&existing[f.key+'_r']!=null)?existing[f.key+'_r']:'';
+    }
+  });
+  const notesEl=document.getElementById('ms-notes');
+  if(notesEl)notesEl.value=existing?(existing.notes||''):'';
+}
+// Human-readable summary of one entry's non-empty fields, used in history and the Today "Other Logs" card
+function fmtMeasureEntry(e){
+  if(!e)return '';
+  return MEASURE_FIELDS.filter(f=>f.single?e[f.key]!=null:(e[f.key+'_l']!=null||e[f.key+'_r']!=null))
+    .map(f=>{
+      if(f.single)return f.label+': '+e[f.key]+'cm';
+      const l=e[f.key+'_l'],r=e[f.key+'_r'];
+      if(l!=null&&r!=null)return f.label+': L '+l+'cm / R '+r+'cm';
+      if(l!=null)return f.label+': '+l+'cm (L)';
+      return f.label+': '+r+'cm (R)';
+    }).join(' · ');
+}
+let expandedMeasurements=new Set();
+function toggleMeasurementExpand(id){if(expandedMeasurements.has(id))expandedMeasurements.delete(id);else expandedMeasurements.add(id);renderMeasurementsHistory();}
+function renderMeasurementsHistory(){
+  const el=document.getElementById('measurements-history');if(!el)return;
+  const list=[...(S.measurements||[])].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(!list.length){el.innerHTML='No entries yet.';return;}
+  el.innerHTML=list.map(e=>{
+    const expanded=expandedMeasurements.has(e.id);
+    const summary=fmtMeasureEntry(e);
+    return `<div class="history-row" style="flex-direction:column;align-items:stretch;cursor:pointer" onclick="toggleMeasurementExpand('${e.id}')">
+      <div style="display:flex;justify-content:space-between;width:100%">
+        <span style="color:var(--muted)">${e.date}${e.notes?' · '+e.notes:''}</span>
+        <span>${expanded?'▲':'▼'} <span class="meal-del" style="font-size:15px" onclick="event.stopPropagation();deleteMeasurementEntry('${e.id}')" title="Delete">×</span></span>
+      </div>
+      ${expanded?`<div style="font-size:12px;color:var(--text);margin-top:6px;line-height:1.6">${summary||'No measurements recorded'}</div>`:''}
+    </div>`;
+  }).join('');
+}
+function deleteMeasurementEntry(id){
+  S.measurements=(S.measurements||[]).filter(m=>m.id!==id);
+  markDeleted('measurement',id);
+  expandedMeasurements.delete(id);
+  saveLocal();
+  renderMeasurementsHistory();
+}
+
 // ─── SLEEP ────────────────────────────────────────────────────────────────────
 let sleepEditId=null;
 function hm(h,m){return (+h||0)+((+m||0)/60);}
@@ -2007,6 +2178,7 @@ function renderViewDate(){
     }
   }
   updateAll();
+  loadMeasurementsIntoForm(); // only on an actual day change/initial load — see note in updateAll()
   updateOtherLogs();
 }
 function updateOtherLogs(){
@@ -2014,13 +2186,14 @@ function updateOtherLogs(){
   if(!card)return;
   if(isViewingToday()){ card.classList.add('hidden'); return; }
   const dateStr=viewDateStr();
-  const mv=movementForDate(dateStr),sl=sleepForDate(dateStr),wt=weightForDate(dateStr);
-  if(!mv&&!sl&&!wt){ card.classList.add('hidden'); return; }
+  const mv=movementForDate(dateStr),sl=sleepForDate(dateStr),wt=weightForDate(dateStr),ms=measurementsForDate(dateStr);
+  if(!mv&&!sl&&!wt&&!ms){ card.classList.add('hidden'); return; }
   card.classList.remove('hidden');
   let html='';
   if(mv)html+=`<div class="history-row"><span>🏃 Movement</span><span style="font-weight:700">${mv.steps.toLocaleString()} steps · ${mv.calBurned.toLocaleString()} cal burned</span></div>`;
   if(sl)html+=`<div class="history-row"><span>😴 Sleep</span><span style="font-weight:700">${fmtHM(sl.total)} total · ${fmtMins(sl.deep)} deep · ${fmtMins(sl.rem)} REM</span></div>`;
   if(wt)html+=`<div class="history-row"><span>⚖️ Weight</span><span style="font-weight:700">${wt.weight}kg</span></div>`;
+  if(ms)html+=`<div class="history-row"><span>📏 Measurements</span><span style="font-weight:700;text-align:right;max-width:65%">${fmtMeasureEntry(ms)||'Logged'}</span></div>`;
   document.getElementById('other-logs-body').innerHTML=html;
 }
 
@@ -2307,7 +2480,7 @@ async function handleChatPhoto(event){const file=event.target.files[0];if(!file)
 function appendMsg(role,text){const msgs=document.getElementById('chat-msgs'),now=new Date().toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'}),d=document.createElement('div');d.className='msg msg-'+(role==='user'?'user':'ai');d.innerHTML=`<div class="msg-bubble">${text.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')}</div><div class="msg-time">${now}</div>`;msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;return d;}
 function appendLoading(){const msgs=document.getElementById('chat-msgs'),d=document.createElement('div');d.className='msg msg-ai';d.innerHTML='<div class="msg-bubble"><div class="dots"><span></span><span></span><span></span></div></div>';msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;return d;}
 
-function updateAll(){updateMacros();updateWater();updateMealsList();updateWeight();updateMovement();updateTrafficLight();renderSupps();renderPeptides();updateSleepView();renderSleepHistory();renderFastingTab();}
+function updateAll(){updateMacros();updateWater();updateMealsList();updateWeight();updateMovement();updateTrafficLight();renderSupps();renderPeptides();updateSleepView();renderSleepHistory();renderFastingTab();renderMeasurementsHistory();}
 
 function addProteinShake(){
   const protein=+document.getElementById('pp-protein').value||23;
@@ -2563,6 +2736,7 @@ async function loadFromDrive(){
         S.water = mergeById(S.water, driveData.water, 'water').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
         S.movement = mergeById(S.movement, driveData.movement, 'movement');
         S.quickFoods = mergeById(S.quickFoods, driveData.quickFoods, 'quickfood');
+        S.measurements = mergeById(S.measurements, driveData.measurements, 'measurement').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
         if(driveData.fasting){
           if(!S.fasting)S.fasting={windowEnabled:false,windowHours:8,windowStart:'12:00',current:null,log:[]};
           S.fasting.log = mergeById(S.fasting.log, driveData.fasting.log, 'fast').sort((a,b)=>(b.startedAt||0)-(a.startedAt||0));
@@ -2613,6 +2787,8 @@ async function syncToDrive(){
       settings: S.settings,
       today: S.today,
       tombstones: S.tombstones,
+      quickFoods: S.quickFoods,
+      measurements: S.measurements,
       lastSync: new Date().toISOString()
     });
     const resp = await driveApiFetch(
