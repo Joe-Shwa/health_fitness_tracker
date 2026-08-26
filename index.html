@@ -341,6 +341,14 @@ select.input-field { appearance: auto; }
           <option value="very_active">Very active — physical job or 2x/day training</option>
         </select>
       </div>
+      <div class="form-group">
+        <div class="input-label">Training level</div>
+        <select class="input-field" id="s-training">
+          <option value="general">General health — not training specifically</option>
+          <option value="recreational" selected>Recreational gym-goer — staying fit</option>
+          <option value="athlete">Competitive athlete / bodybuilder</option>
+        </select>
+      </div>
       <button class="btn btn-primary" onclick="validateGoal()">Continue →</button>
     </div>
 
@@ -454,9 +462,28 @@ select.input-field { appearance: auto; }
     </div>
     <button class="btn btn-secondary btn-sm" style="width:auto;margin-bottom:6px" onclick="recalcProfileTargets()">Recalculate targets →</button>
 
+    <div class="form-group">
+      <div class="input-label">Training level</div>
+      <select class="input-field" id="pf-training">
+        <option value="general">General health — not training specifically</option>
+        <option value="recreational">Recreational gym-goer — staying fit</option>
+        <option value="athlete">Competitive athlete / bodybuilder</option>
+      </select>
+    </div>
+
     <div class="settings-section-title">Your Macro Targets</div>
     <div class="review-macro-row" id="settings-macros"></div>
     <div class="macro-explain card" id="settings-explain" style="margin-bottom:4px"></div>
+
+    <div class="settings-section-title">Dietitian / Custom Targets</div>
+    <p style="margin-bottom:10px">Got specific numbers from a dietitian or trainer? Enter them here to override the calculated targets above. Leave a field blank to keep using the calculated value.</p>
+    <div class="macro-fields">
+      <div class="macro-field-wrap"><div class="input-label">Cal</div><input class="input-field" id="pf-ov-cals" type="number" placeholder="auto"></div>
+      <div class="macro-field-wrap"><div class="input-label">Protein g</div><input class="input-field" id="pf-ov-protein" type="number" placeholder="auto"></div>
+      <div class="macro-field-wrap"><div class="input-label">Fat g</div><input class="input-field" id="pf-ov-fat" type="number" placeholder="auto"></div>
+      <div class="macro-field-wrap"><div class="input-label">Carbs g</div><input class="input-field" id="pf-ov-carb" type="number" placeholder="auto"></div>
+      <div class="macro-field-wrap"><div class="input-label">Fiber g</div><input class="input-field" id="pf-ov-fiber" type="number" placeholder="auto"></div>
+    </div>
 
     <div class="settings-section-title">Colour Scheme</div>
     <div class="theme-swatch-row">
@@ -930,6 +957,8 @@ function migrateState(){
   if(typeof S.settings.nutrients.fat!=='boolean')S.settings.nutrients.fat=true;
   if(typeof S.settings.nutrients.carb!=='boolean')S.settings.nutrients.carb=true;
   if(typeof S.settings.nutrients.fiber!=='boolean')S.settings.nutrients.fiber=false;
+  if(S.profile && !S.profile.trainingLevel)S.profile.trainingLevel='recreational';
+  if(S.profile && !S.profile.overrides)S.profile.overrides={cals:null,protein:null,fat:null,carbs:null,fiber:null};
   if(!S.meals)S.meals=[];
   if(!S.water)S.water=[];
   migrateArr(S.weights,'w');
@@ -959,6 +988,9 @@ function migrateState(){
   migrateArr(S.supplements,'supp');
   if(!S.peptides)S.peptides=[];
   migrateArr(S.peptides,'pep');
+  if(!S.peptides.some(p=>p.id==='mounjaro')){
+    S.peptides.push({...MOUNJARO_SEED, updatedAt:Date.now()});
+  }
   if(!S.peptideLogs)S.peptideLogs=[];
   migrateArr(S.peptideLogs,'pep_log');
   if(!S.peptideChecks)S.peptideChecks={};
@@ -976,6 +1008,15 @@ function migrateState(){
   if(!S.measurements)S.measurements=[];
   migrateArr(S.measurements,'ms','date');
 }
+
+const MOUNJARO_SEED = {
+  id:'mounjaro', name:'Mounjaro (Tirzepatide)', custom:false,
+  purpose:'GLP-1/GIP dual receptor agonist — reduces appetite and supports fat loss alongside improved insulin sensitivity.',
+  cautions:['Appetite suppression can make it harder to hit protein targets — prioritise protein-dense foods early in the day, especially around injection day.'],
+  evidence:'', affectsAppetite:true, tracking:'logged',
+  dosing:{type:'titration', startDate:new Date().toDateString(), frequency:'Weekly injection',
+    schedule:Array.from({length:12},(_,i)=>({week:i+1,units:2.5,mg:2.5,vial:'2.5mg pen'}))}
+};
 
 const QUICK_FOODS_SEED = [
   {n:"Greek Yoghurt",i:"🥛",c:150,p:17,f:5,cb:8,fb:0,a:"170g"},
@@ -1011,6 +1052,11 @@ const SUPPS = [
 // ─── MACRO ENGINE ───────────────────────────────────────────────────────────────
 const ACTIVITY_MULT = {sedentary:1.2, light:1.375, moderate:1.55, active:1.725, very_active:1.9};
 const ACTIVITY_LABEL = {sedentary:'sedentary', light:'lightly active', moderate:'moderately active', active:'active', very_active:'very active'};
+const TRAINING_LEVELS = {
+  general:      {label:'General health / not training specifically', proteinPerKg:{lose:1.8, maintain:1.2, build:1.6}},
+  recreational: {label:'Recreational gym-goer / staying fit',         proteinPerKg:{lose:2.2, maintain:1.6, build:2.0}},
+  athlete:      {label:'Competitive athlete / bodybuilder',           proteinPerKg:{lose:2.6, maintain:2.0, build:2.4}}
+};
 function computeMacros(p){
   const sex=p.sex==='female'?'female':'male';
   const age=+p.age||30, height=+p.height||170, weight=+p.weight||70;
@@ -1021,7 +1067,10 @@ function computeMacros(p){
   let cals = goalType==='lose' ? tdee*0.8 : goalType==='build' ? tdee*1.1 : tdee;
   const floor = sex==='male'?1500:1200;
   cals = Math.max(Math.round(cals),floor);
-  const proteinPerKg = goalType==='lose'?2.2:goalType==='build'?2.0:1.6;
+  const trainingLevel = TRAINING_LEVELS[p.trainingLevel]?p.trainingLevel:'recreational';
+  const proteinPerKg = (TRAINING_LEVELS[trainingLevel] && TRAINING_LEVELS[trainingLevel].proteinPerKg[goalType]!=null)
+    ? TRAINING_LEVELS[trainingLevel].proteinPerKg[goalType]
+    : (goalType==='lose'?2.2:goalType==='build'?2.0:1.6);
   const protein = Math.round(proteinPerKg*weight);
   const fatPct = sex==='female'?0.30:0.25;
   const fat = Math.round((cals*fatPct)/9);
@@ -1029,6 +1078,19 @@ function computeMacros(p){
   const water = Math.round((weight/30)*1000);
   const fiber = Math.round((cals/1000)*14);
   return {cals,protein,fat,carbs,water,fiber,bmr:Math.round(bmr),tdee:Math.round(tdee),proteinPerKg,fatPct};
+}
+function computeFinalMacros(p, overrides){
+  const m = computeMacros(p);
+  const ov = overrides||{};
+  return {
+    ...m,
+    cals: ov.cals!=null && ov.cals!=='' ? +ov.cals : m.cals,
+    protein: ov.protein!=null && ov.protein!=='' ? +ov.protein : m.protein,
+    fat: ov.fat!=null && ov.fat!=='' ? +ov.fat : m.fat,
+    carbs: ov.carbs!=null && ov.carbs!=='' ? +ov.carbs : m.carbs,
+    fiber: ov.fiber!=null && ov.fiber!=='' ? +ov.fiber : m.fiber,
+    hasOverrides: !!(ov.cals||ov.protein||ov.fat||ov.carbs||ov.fiber)
+  };
 }
 function macroExplanation(p,m){
   const sex=p.sex==='female'?'female':'male';
@@ -1114,6 +1176,13 @@ function openSettings(){
   document.getElementById('pf-height').value=S.profile.height||'';
   document.getElementById('pf-activity').value=S.profile.activity||'moderate';
   document.getElementById('pf-goal').value=S.profile.goal||'';
+  document.getElementById('pf-training').value=S.profile.trainingLevel||'recreational';
+  const ov=S.profile.overrides||{};
+  document.getElementById('pf-ov-cals').value=ov.cals!=null?ov.cals:'';
+  document.getElementById('pf-ov-protein').value=ov.protein!=null?ov.protein:'';
+  document.getElementById('pf-ov-fat').value=ov.fat!=null?ov.fat:'';
+  document.getElementById('pf-ov-carb').value=ov.carbs!=null?ov.carbs:'';
+  document.getElementById('pf-ov-fiber').value=ov.fiber!=null?ov.fiber:'';
   S._pfSex=S.profile.sex||'male';
   S._pfGoalType=S.profile.goalType||'lose';
   S._pfTheme=S.theme||'ocean';
@@ -1122,6 +1191,15 @@ function openSettings(){
   renderSettingsPanel();
   renderSettingsNutrientPanel();
   document.getElementById('settings-overlay').classList.remove('hidden');
+}
+function readOverridesFromForm(){
+  return {
+    cals:document.getElementById('pf-ov-cals').value,
+    protein:document.getElementById('pf-ov-protein').value,
+    fat:document.getElementById('pf-ov-fat').value,
+    carbs:document.getElementById('pf-ov-carb').value,
+    fiber:document.getElementById('pf-ov-fiber').value
+  };
 }
 function closeSettings(){
   const name=document.getElementById('pf-name').value.trim();
@@ -1133,12 +1211,26 @@ function closeSettings(){
   S.profile.sex=S._pfSex||S.profile.sex;
   S.profile.goalType=S._pfGoalType||S.profile.goalType;
   S.profile.activity=document.getElementById('pf-activity').value||S.profile.activity;
+  S.profile.trainingLevel=document.getElementById('pf-training').value||S.profile.trainingLevel||'recreational';
   let goal=parseFloat(document.getElementById('pf-goal').value);
   if(S.profile.goalType==='maintain'){
     const latest=[...S.weights].sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
     goal=latest?latest.weight:S.profile.current;
   }
   if(goal)S.profile.goal=goal;
+  const ovRaw=readOverridesFromForm();
+  const overrides={
+    cals:ovRaw.cals!==''?+ovRaw.cals:null,
+    protein:ovRaw.protein!==''?+ovRaw.protein:null,
+    fat:ovRaw.fat!==''?+ovRaw.fat:null,
+    carbs:ovRaw.carbs!==''?+ovRaw.carbs:null,
+    fiber:ovRaw.fiber!==''?+ovRaw.fiber:null
+  };
+  S.profile.overrides=overrides;
+  const weight=(()=>{const latest=[...S.weights].sort((a,b)=>new Date(b.date)-new Date(a.date))[0];return latest?latest.weight:S.profile.current;})();
+  const p={sex:S.profile.sex,age:S.profile.age,height:S.profile.height,weight,goalType:S.profile.goalType,activity:S.profile.activity,trainingLevel:S.profile.trainingLevel};
+  const m=computeFinalMacros(p,overrides);
+  S.profile.cals=m.cals;S.profile.protein=m.protein;S.profile.fat=m.fat;S.profile.carbs=m.carbs;S.profile.water=m.water;S.profile.fiber=m.fiber;
   document.getElementById('h-title').textContent=(S.profile.name||'Your')+"'s Tracker";
   saveLocal();
   document.getElementById('settings-overlay').classList.add('hidden');
@@ -1164,17 +1256,34 @@ function updatePfThemeUI(){
 }
 function recalcProfileTargets(){
   const weight=(()=>{const latest=[...S.weights].sort((a,b)=>new Date(b.date)-new Date(a.date))[0];return latest?latest.weight:S.profile.current;})();
-  const p={sex:S._pfSex,age:parseFloat(document.getElementById('pf-age').value)||S.profile.age,height:parseFloat(document.getElementById('pf-height').value)||S.profile.height,weight,goalType:S._pfGoalType,activity:document.getElementById('pf-activity').value};
-  const m=computeMacros(p);
+  const trainingLevel=document.getElementById('pf-training').value||'recreational';
+  const p={sex:S._pfSex,age:parseFloat(document.getElementById('pf-age').value)||S.profile.age,height:parseFloat(document.getElementById('pf-height').value)||S.profile.height,weight,goalType:S._pfGoalType,activity:document.getElementById('pf-activity').value,trainingLevel};
+  const overrides=readOverridesFromForm();
+  const m=computeFinalMacros(p,overrides);
   S.profile.cals=m.cals;S.profile.protein=m.protein;S.profile.fat=m.fat;S.profile.carbs=m.carbs;S.profile.water=m.water;S.profile.fiber=m.fiber;
+  S.profile.trainingLevel=trainingLevel;
+  S.profile.overrides={
+    cals:overrides.cals!==''?+overrides.cals:null,
+    protein:overrides.protein!==''?+overrides.protein:null,
+    fat:overrides.fat!==''?+overrides.fat:null,
+    carbs:overrides.carbs!==''?+overrides.carbs:null,
+    fiber:overrides.fiber!==''?+overrides.fiber:null
+  };
   saveLocal();renderSettingsMacros();updateAll();
 }
 function renderSettingsMacros(){
   const weight=(()=>{const latest=[...S.weights].sort((a,b)=>new Date(b.date)-new Date(a.date))[0];return latest?latest.weight:(S.profile?S.profile.current:70);})();
-  const p={sex:S._pfSex,age:parseFloat(document.getElementById('pf-age').value)||(S.profile&&S.profile.age),height:parseFloat(document.getElementById('pf-height').value)||(S.profile&&S.profile.height),weight,goalType:S._pfGoalType,activity:document.getElementById('pf-activity').value};
-  const m=computeMacros(p);
+  const trainingLevel=(document.getElementById('pf-training')&&document.getElementById('pf-training').value)||(S.profile&&S.profile.trainingLevel)||'recreational';
+  const p={sex:S._pfSex,age:parseFloat(document.getElementById('pf-age').value)||(S.profile&&S.profile.age),height:parseFloat(document.getElementById('pf-height').value)||(S.profile&&S.profile.height),weight,goalType:S._pfGoalType,activity:document.getElementById('pf-activity').value,trainingLevel};
+  const overrides=readOverridesFromForm();
+  const m=computeFinalMacros(p,overrides);
   document.getElementById('settings-macros').innerHTML=macroChips(m);
-  document.getElementById('settings-explain').innerHTML=macroExplanation(p,m);
+  let explainHtml='';
+  if(m.hasOverrides){
+    explainHtml+=`<div style="margin-bottom:10px"><strong>⚙️ Custom targets active</strong> — showing your entered values where set, calculated values elsewhere.</div>`;
+  }
+  explainHtml+=macroExplanation(p,m);
+  document.getElementById('settings-explain').innerHTML=explainHtml;
 }
 function renderSettingsPanel(){
   const el=document.getElementById('settings-tab-list');
@@ -1299,7 +1408,9 @@ function calcTargets(){
   let goal=parseFloat(document.getElementById('s-goal').value);
   if(goalType==='maintain'||!goal)goal=cur;
   const activity=document.getElementById('s-activity').value||'moderate';
-  const p={sex,age,height,weight:cur,goalType,activity};
+  const trainingLevel=document.getElementById('s-training').value||'recreational';
+  S._setupTrainingLevel=trainingLevel;
+  const p={sex,age,height,weight:cur,goalType,activity,trainingLevel};
   const m=computeMacros(p);
   S._pending={cals:m.cals,protein:m.protein,fat:m.fat,carbs:m.carbs,water:m.water,fiber:m.fiber};
   S._pendingGoal=goal;
@@ -1318,7 +1429,7 @@ function finishSetup(){
   const activity=document.getElementById('s-activity').value||'moderate';
   if(!S._pending)calcTargets();
   if(!S._pending)return;
-  S.profile={name,sex,age,height,current:cur,goal,goalType,activity,...S._pending};
+  S.profile={name,sex,age,height,current:cur,goal,goalType,activity,trainingLevel:S._setupTrainingLevel||'recreational',overrides:{cals:null,protein:null,fat:null,carbs:null,fiber:null},...S._pending};
   S.theme=S._setupTheme||'ocean';
   applyTheme(S.theme);
   if(!S.weights.find(w=>w.weight===cur))S.weights.push({id:newId('w'),updatedAt:Date.now(),date:new Date().toDateString(),weight:cur});
