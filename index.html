@@ -1860,43 +1860,166 @@ function editLookup(){
 }
 
 // ─── PHOTO LOG ────────────────────────────────────────────────────────────────
+function phEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+let lastPhotoB64=null,lastPhotoType=null,currentPhotoMeal=null;
 async function handleMealPhoto(event){
   const file=event.target.files[0];if(!file)return;
   const preview=document.getElementById('ph-preview'),img=document.getElementById('ph-img'),loading=document.getElementById('ph-loading'),result=document.getElementById('ph-result');
   const reader=new FileReader();
   reader.onload=async e=>{
     img.src=e.target.result;preview.classList.remove('hidden');loading.classList.remove('hidden');result.innerHTML='';
-    try{
-      const b64=e.target.result.split(',')[1];
-      const resp=await fetch('https://josh-tracker-proxy.joe-shwa-smith.workers.dev',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          model:'claude-sonnet-4-6',max_tokens:400,
-          messages:[{role:'user',content:[
-            {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
-            {type:'text',text:`Analyse this meal photo for a ${profileDescriptor()}, ${S.profile?S.profile.protein:150}g daily protein target. Cooked weight assumed. Return ONLY valid JSON: {"name":"meal description","cal":number,"pro":number,"fat":number,"carb":number,"fib":number,"emoji":"one emoji","note":"confidence note or key assumption"}`}
-          ]}]
-        })
-      });
-      const data=await resp.json();
-      if(data.error){throw new Error(data.error.message);}
-      const text=data.content.filter(c=>c.type==='text').map(c=>c.text).join('');
-      const clean=text.replace(/```json\n?|```/g,'').trim();
-      const meal=JSON.parse(clean);
-      loading.classList.add('hidden');
-      result.innerHTML=`<div style="padding:8px 0"><div style="font-size:14px;font-weight:700;margin-bottom:6px">${meal.emoji} ${meal.name}</div><div style="margin-bottom:6px"><span class="tag">🔥 ${meal.cal} cal</span><span class="tag" style="background:#ECFDF5;color:#10B981">💪 ${meal.pro}g protein</span><span class="tag" style="background:#FFFBEB;color:#F59E0B">🥑 ${meal.fat}g fat</span><span class="tag" style="background:#EFF6FF;color:#3B82F6">🍝 ${meal.carb}g carbs</span><span class="tag" style="background:#F3E8FF;color:#9333EA">🌾 ${meal.fib||0}g fiber</span></div><div style="font-size:12px;color:var(--muted);margin-bottom:10px">${meal.note}</div><button class="btn btn-primary btn-sm" style="width:auto;margin-right:8px" onclick='logPhotoMeal(${JSON.stringify(meal)})'>Add to today ✓</button><button class="btn btn-secondary btn-sm" style="width:auto;margin-right:8px" onclick='saveAsQuickFood(${JSON.stringify(meal)})'>⭐ Quick Add</button><button class="btn btn-secondary btn-sm" style="width:auto" onclick="document.getElementById('ph-preview').classList.add('hidden')">Cancel</button></div>`;
-    }catch(e){
-      loading.classList.add('hidden');
+    lastPhotoB64=e.target.result.split(',')[1];lastPhotoType=file.type;currentPhotoMeal=null;
+    const prompt=`Analyse this meal photo for a ${profileDescriptor()}, ${S.profile?S.profile.protein:150}g daily protein target. Cooked weight assumed. Return ONLY valid JSON: {"name":"meal description","cal":number,"pro":number,"fat":number,"carb":number,"fib":number,"emoji":"one emoji","note":"confidence note or key assumption"}`;
+    await analysePhotoAndRender(prompt,loading,result);
+  };
+  reader.readAsDataURL(file);event.target.value='';
+}
+async function analysePhotoAndRender(promptText,loading,result){
+  try{
+    const resp=await fetch('https://josh-tracker-proxy.joe-shwa-smith.workers.dev',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-6',max_tokens:400,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:lastPhotoType,data:lastPhotoB64}},
+          {type:'text',text:promptText}
+        ]}]
+      })
+    });
+    const data=await resp.json();
+    if(data.error){throw new Error(data.error.message);}
+    const text=data.content.filter(c=>c.type==='text').map(c=>c.text).join('');
+    const clean=text.replace(/```json\n?|```/g,'').trim();
+    const meal=JSON.parse(clean);
+    currentPhotoMeal=meal;
+    loading.classList.add('hidden');
+    renderPhotoResult(meal);
+  }catch(e){
+    loading.classList.add('hidden');
+    if(currentPhotoMeal){
+      const err=document.getElementById('ph-rescan-error');
+      if(err)err.textContent="Couldn't re-analyse this photo — your fields above are unchanged. Try Re-scan again, or edit the fields manually.";
+    }else{
       result.innerHTML=`<div style="color:var(--muted);font-size:13px;padding:8px 0">
         <p style="margin-bottom:8px">Couldn't analyse this photo. Try the <strong>Look Up Macros</strong> section instead — type what's on your plate and it'll estimate from the description.</p>
         <button class="btn btn-secondary btn-sm" style="width:auto" onclick="document.getElementById('ph-preview').classList.add('hidden');showTab('log',document.querySelectorAll('.nav-tab')[1])">Use text lookup →</button>
       </div>`;
     }
-  };
-  reader.readAsDataURL(file);event.target.value='';
+  }
 }
-function logPhotoMeal(m){addMeal(m);document.getElementById('ph-preview').classList.add('hidden');}
+function renderPhotoResult(meal){
+  const result=document.getElementById('ph-result');
+  result.innerHTML=`<div style="padding:8px 0">
+    <div class="form-group"><div class="input-label">Food (edit if the AI got it wrong)</div><input class="input-field" id="ph-name" value="${phEsc(meal.name)}"></div>
+    <div class="macro-fields" id="ph-macro-fields">
+      <div class="macro-field-wrap"><div class="input-label">Cal</div><input class="input-field" id="ph-cal" type="number" value="${meal.cal}"></div>
+      <div class="macro-field-wrap"><div class="input-label">Protein g</div><input class="input-field" id="ph-pro" type="number" value="${meal.pro}"></div>
+      <div class="macro-field-wrap"><div class="input-label">Fat g</div><input class="input-field" id="ph-fat" type="number" value="${meal.fat}"></div>
+      <div class="macro-field-wrap"><div class="input-label">Carbs g</div><input class="input-field" id="ph-carb" type="number" value="${meal.carb}"></div>
+      <div class="macro-field-wrap"><div class="input-label">Fiber g</div><input class="input-field" id="ph-fib" type="number" value="${meal.fib||0}"></div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:6px">${phEsc(meal.note||'')}</div>
+    <div id="ph-rescan-error" style="font-size:12px;color:#EF4444;margin-bottom:6px"></div>
+    <div id="ph-action-row" style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" style="width:auto" onclick="logPhotoMealFromFields()">Add to today ✓</button>
+      <button class="btn btn-secondary btn-sm" style="width:auto" onclick="saveAsQuickFood(getPhotoFieldsAsMeal())">⭐ Quick Add</button>
+      <button class="btn btn-secondary btn-sm" style="width:auto" onclick="showLeftoverOptions()">🥡 Leftovers</button>
+      <button class="btn btn-secondary btn-sm" style="width:auto" onclick="rescanMealPhoto()">🔄 Re-scan</button>
+      <button class="btn btn-secondary btn-sm" style="width:auto" onclick="document.getElementById('ph-preview').classList.add('hidden')">Cancel</button>
+    </div>
+    <div id="ph-leftover-row" class="hidden" style="margin-top:4px">
+      <div id="ph-leftover-note" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" style="width:auto" onclick="logLeftoversSeparately()">➕ Log separately</button>
+        <button class="btn btn-secondary btn-sm" id="ph-deduct-btn" style="width:auto" onclick="deductLeftoversFromLastMeal()">➖ Deduct from last meal</button>
+        <button class="btn btn-secondary btn-sm" style="width:auto" onclick="hideLeftoverOptions()">‹ Back</button>
+      </div>
+    </div>
+  </div>`;
+}
+// Switches the photo-result view from the normal meal actions to the leftovers choice — used when
+// this was actually food left on a plate rather than a new meal (see showLeftoverOptions below).
+function hideLeftoverOptions(){
+  document.getElementById('ph-leftover-row').classList.add('hidden');
+  document.getElementById('ph-action-row').classList.remove('hidden');
+}
+// Shows the "log separately vs deduct from last meal" choice for the currently-analysed photo —
+// reached by tapping 🥡 Leftovers on a normal Photo Log result, once you notice this was actually
+// leftovers rather than a new meal. Reuses the same photo/macro estimate already on screen instead
+// of running a second AI analysis pass.
+function showLeftoverOptions(){
+  const target=lastLoggableMealForDate(viewDateStr());
+  const note=document.getElementById('ph-leftover-note');
+  const deductBtn=document.getElementById('ph-deduct-btn');
+  if(target){
+    note.innerHTML='Deducting will subtract from: <strong>'+phEsc(target.name)+'</strong>'+(target.time?' ('+target.time+')':'');
+    deductBtn.disabled=false;
+  } else {
+    note.textContent='No meal logged yet today to deduct from — you can still log this as its own leftovers entry.';
+    deductBtn.disabled=true;
+  }
+  document.getElementById('ph-action-row').classList.add('hidden');
+  document.getElementById('ph-leftover-row').classList.remove('hidden');
+}
+// addMeal() already coerces numeric fields itself, so these pass through as raw field-string values.
+function getPhotoFieldsAsMeal(){
+  return {
+    name:document.getElementById('ph-name').value,
+    cal:document.getElementById('ph-cal').value,
+    pro:document.getElementById('ph-pro').value,
+    fat:document.getElementById('ph-fat').value,
+    carb:document.getElementById('ph-carb').value,
+    fib:document.getElementById('ph-fib').value,
+    emoji:(currentPhotoMeal&&currentPhotoMeal.emoji)||'🍽️'
+  };
+}
+function logPhotoMealFromFields(){
+  addMeal(getPhotoFieldsAsMeal());
+  document.getElementById('ph-preview').classList.add('hidden');
+}
+async function rescanMealPhoto(){
+  if(!lastPhotoB64)return;
+  const nameInput=document.getElementById('ph-name');
+  const correctedName=nameInput?nameInput.value.trim():'';
+  const loading=document.getElementById('ph-loading'),result=document.getElementById('ph-result');
+  const errEl=document.getElementById('ph-rescan-error');if(errEl)errEl.textContent='';
+  loading.classList.remove('hidden');
+  const prompt=`Analyse this meal photo again, for a ${profileDescriptor()}. The user has told you the correct food identification is: "${correctedName}" — trust that identification over your first guess, but keep reassessing the portion size and macros directly from what you see in the photo (cooked weight assumed). Return ONLY valid JSON: {"name":"...","cal":number,"pro":number,"fat":number,"carb":number,"fib":number,"emoji":"one emoji","note":"confidence note or key assumption"}`;
+  await analysePhotoAndRender(prompt,loading,result);
+}
+
+// ─── LEFTOVERS ──────────────────────────────────────────────────────────────
+// Built straight into the merged Photo Log above rather than as a separate camera card — tap 🥡
+// Leftovers on a normal Photo Log result to get the log-separately / deduct-from-last-meal choice,
+// using the macro estimate already on screen (no second AI analysis pass). The deduction shows up
+// as a visible second "Leftovers removed" line, not a silent edit to the original entry.
+function lastLoggableMealForDate(dateStr){
+  const meals=mealsForDate(dateStr).filter(m=>!m.isDeduction);
+  if(!meals.length)return null;
+  return meals.reduce((a,b)=>(b.updatedAt||0)>(a.updatedAt||0)?b:a);
+}
+function logLeftoversSeparately(){
+  addMeal(getPhotoFieldsAsMeal());
+  document.getElementById('ph-preview').classList.add('hidden');
+}
+function deductLeftoversFromLastMeal(){
+  const target=lastLoggableMealForDate(viewDateStr());
+  if(!target)return;
+  const vals=getPhotoFieldsAsMeal();
+  // Clamp the deduction's magnitude to the target meal's own values, so subtracting can never push
+  // the day's totals negative — if the AI overestimates the leftover, it just zeroes that meal out.
+  const clamp=(v,max)=>Math.min(Math.abs(+v||0),Math.abs(+max||0));
+  const dedCal=clamp(vals.cal,target.cal),dedPro=clamp(vals.pro,target.pro),dedFat=clamp(vals.fat,target.fat),dedCarb=clamp(vals.carb,target.carb),dedFib=clamp(vals.fib,target.fib);
+  addMeal({
+    name:'Leftovers removed — '+(vals.name||'from plate'),
+    cal:-dedCal,pro:-dedPro,fat:-dedFat,carb:-dedCarb,fib:-dedFib,
+    emoji:'➖',
+    isDeduction:true,
+    deductedFrom:target.id
+  });
+  document.getElementById('ph-preview').classList.add('hidden');
+}
 
 // ─── WEIGHT ───────────────────────────────────────────────────────────────────
 function logWeight(){
