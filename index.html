@@ -446,6 +446,10 @@ select.input-field { appearance: auto; }
     <div class="goal-card" id="pf-goal-lose" onclick="setProfileGoalType('lose')"><span class="gc-icon">📉</span><div><div class="gc-title">Lose weight</div></div></div>
     <div class="goal-card" id="pf-goal-maintain" onclick="setProfileGoalType('maintain')"><span class="gc-icon">⚖️</span><div><div class="gc-title">Maintain weight</div></div></div>
     <div class="goal-card" id="pf-goal-build" onclick="setProfileGoalType('build')"><span class="gc-icon">💪</span><div><div class="gc-title">Build muscle / training</div></div></div>
+    <div class="form-group" id="pf-baseline-wrap" style="margin-top:10px">
+      <div class="input-label">Baseline (kg)</div>
+      <input class="input-field" id="pf-baseline" type="number" step="0.1">
+    </div>
     <div class="form-group" id="pf-goal-weight-wrap" style="margin-top:10px">
       <div class="input-label" id="pf-goal-weight-label">Goal weight (kg)</div>
       <input class="input-field" id="pf-goal" type="number" step="0.1">
@@ -1210,6 +1214,7 @@ function openSettings(){
   document.getElementById('pf-height').value=S.profile.height||'';
   document.getElementById('pf-activity').value=S.profile.activity||'moderate';
   document.getElementById('pf-goal').value=S.profile.goal||'';
+  document.getElementById('pf-baseline').value=S.profile.current||'';
   document.getElementById('pf-training').value=S.profile.trainingLevel||'recreational';
   const ov=S.profile.overrides||{};
   document.getElementById('pf-ov-cals').value=ov.cals!=null?ov.cals:'';
@@ -1248,6 +1253,8 @@ function closeSettings(){
   S.profile.goalType=S._pfGoalType||S.profile.goalType;
   S.profile.activity=document.getElementById('pf-activity').value||S.profile.activity;
   S.profile.trainingLevel=document.getElementById('pf-training').value||S.profile.trainingLevel||'recreational';
+  const baseline=parseFloat(document.getElementById('pf-baseline').value);
+  if(baseline)S.profile.current=baseline;
   let goal=parseFloat(document.getElementById('pf-goal').value);
   if(S.profile.goalType==='maintain'){
     const latest=[...S.weights].sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
@@ -2700,10 +2707,12 @@ function buildSys(){
   const suppLines=(S.supplements||[]).map(s=>`${s.name} (${s.dose})`).join(', ');
   const peptideLines=(S.peptides||[]).map(pep=>pep.dosing.type==='titration'?`${pep.name} (titrating, week ${getPeptideWeek(pep)}/${pep.dosing.schedule.length})`:`${pep.name} (${pep.dosing.doseLabel})`).join('; ');
   const goalLabel={lose:'losing weight',maintain:'maintaining weight',build:'building muscle'}[p.goalType]||'general health';
+  const measurementLines=[...(S.measurements||[])].slice(-5).map(m=>`${m.date}: ${fmtMeasureEntry(m)}${m.notes?' ('+m.notes+')':''}`).join('; ');
   return `You are ${firstName()}'s personal fitness and nutrition assistant. ${firstName()} is a ${profileDescriptor()}, currently focused on ${goalLabel}, goal weight ${p.goal||'not set'}kg.
 
 Current supplements: ${suppLines||'none'}.
 Peptides/compounds in use: ${peptideLines||'none'}.
+Recent body measurements: ${measurementLines||'none logged'}.
 
 Today so far: ${Math.round(t.cal)} cal, ${Math.round(t.pro)}g protein (goal ${p.protein||'--'}g), ${Math.round(t.fat)}g fat, ${Math.round(t.carb)}g carbs, ${getWaterTotal()}ml water.
 
