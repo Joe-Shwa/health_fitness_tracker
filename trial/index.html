@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fitness Tracker</title>
 <link rel="icon" type="image/png" sizes="192x192" href="fitness-tracker-icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="fitness-tracker-icon-512.png">
@@ -446,6 +446,10 @@ select.input-field { appearance: auto; }
     <div class="goal-card" id="pf-goal-lose" onclick="setProfileGoalType('lose')"><span class="gc-icon">📉</span><div><div class="gc-title">Lose weight</div></div></div>
     <div class="goal-card" id="pf-goal-maintain" onclick="setProfileGoalType('maintain')"><span class="gc-icon">⚖️</span><div><div class="gc-title">Maintain weight</div></div></div>
     <div class="goal-card" id="pf-goal-build" onclick="setProfileGoalType('build')"><span class="gc-icon">💪</span><div><div class="gc-title">Build muscle / training</div></div></div>
+    <div class="form-group" id="pf-baseline-wrap" style="margin-top:10px">
+      <div class="input-label">Baseline (kg)</div>
+      <input class="input-field" id="pf-baseline" type="number" step="0.1">
+    </div>
     <div class="form-group" id="pf-goal-weight-wrap" style="margin-top:10px">
       <div class="input-label" id="pf-goal-weight-label">Goal weight (kg)</div>
       <input class="input-field" id="pf-goal" type="number" step="0.1">
@@ -1173,6 +1177,7 @@ function openSettings(){
   document.getElementById('pf-height').value=S.profile.height||'';
   document.getElementById('pf-activity').value=S.profile.activity||'moderate';
   document.getElementById('pf-goal').value=S.profile.goal||'';
+  document.getElementById('pf-baseline').value=S.profile.current||'';
   document.getElementById('pf-training').value=S.profile.trainingLevel||'recreational';
   const ov=S.profile.overrides||{};
   document.getElementById('pf-ov-cals').value=ov.cals!=null?ov.cals:'';
@@ -1209,6 +1214,8 @@ function closeSettings(){
   S.profile.goalType=S._pfGoalType||S.profile.goalType;
   S.profile.activity=document.getElementById('pf-activity').value||S.profile.activity;
   S.profile.trainingLevel=document.getElementById('pf-training').value||S.profile.trainingLevel||'recreational';
+  const baseline=parseFloat(document.getElementById('pf-baseline').value);
+  if(baseline)S.profile.current=baseline;
   let goal=parseFloat(document.getElementById('pf-goal').value);
   if(S.profile.goalType==='maintain'){
     const latest=[...S.weights].sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
@@ -1819,43 +1826,148 @@ function editLookup(){
 }
 
 // ─── PHOTO LOG ────────────────────────────────────────────────────────────────
+function phEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+let lastPhotoB64=null,lastPhotoType=null,currentPhotoMeal=null;
 async function handleMealPhoto(event){
   const file=event.target.files[0];if(!file)return;
   const preview=document.getElementById('ph-preview'),img=document.getElementById('ph-img'),loading=document.getElementById('ph-loading'),result=document.getElementById('ph-result');
   const reader=new FileReader();
   reader.onload=async e=>{
     img.src=e.target.result;preview.classList.remove('hidden');loading.classList.remove('hidden');result.innerHTML='';
-    try{
-      const b64=e.target.result.split(',')[1];
-      const resp=await fetch('https://josh-tracker-proxy.joe-shwa-smith.workers.dev',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','X-App-Key':'IhDgBIUxaM86f12tBXwNIhvufgCmW5qF'},
-        body:JSON.stringify({
-          model:'claude-sonnet-4-6',max_tokens:400,
-          messages:[{role:'user',content:[
-            {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
-            {type:'text',text:`Analyse this meal photo for a ${profileDescriptor()}, ${S.profile?S.profile.protein:150}g daily protein target. Cooked weight assumed. Return ONLY valid JSON: {"name":"meal description","cal":number,"pro":number,"fat":number,"carb":number,"fib":number,"emoji":"one emoji","note":"confidence note or key assumption"}`}
-          ]}]
-        })
-      });
-      const data=await resp.json();
-      if(data.error){throw new Error(data.error.message);}
-      const text=data.content.filter(c=>c.type==='text').map(c=>c.text).join('');
-      const clean=text.replace(/```json\n?|```/g,'').trim();
-      const meal=JSON.parse(clean);
-      loading.classList.add('hidden');
-      result.innerHTML=`<div style="padding:8px 0"><div style="font-size:14px;font-weight:700;margin-bottom:6px">${meal.emoji} ${meal.name}</div><div style="margin-bottom:6px"><span class="tag">🔥 ${meal.cal} cal</span><span class="tag" style="background:#ECFDF5;color:#10B981">💪 ${meal.pro}g protein</span><span class="tag" style="background:#FFFBEB;color:#F59E0B">🥑 ${meal.fat}g fat</span><span class="tag" style="background:#EFF6FF;color:#3B82F6">🍝 ${meal.carb}g carbs</span><span class="tag" style="background:#F3E8FF;color:#9333EA">🌾 ${meal.fib||0}g fiber</span></div><div style="font-size:12px;color:var(--muted);margin-bottom:10px">${meal.note}</div><button class="btn btn-primary btn-sm" style="width:auto;margin-right:8px" onclick='logPhotoMeal(${JSON.stringify(meal)})'>Add to today ✓</button><button class="btn btn-secondary btn-sm" style="width:auto;margin-right:8px" onclick='saveAsQuickFood(${JSON.stringify(meal)})'>⭐ Quick Add</button><button class="btn btn-secondary btn-sm" style="width:auto" onclick="document.getElementById('ph-preview').classList.add('hidden')">Cancel</button></div>`;
-    }catch(e){
-      loading.classList.add('hidden');
+    lastPhotoB64=e.target.result.split(',')[1];lastPhotoType=file.type;currentPhotoMeal=null;
+    const promptText=`Analyse this meal photo for a ${profileDescriptor()}, ${S.profile?S.profile.protein:150}g daily protein target. Cooked weight assumed. Return ONLY valid JSON: {"name":"meal description","cal":number,"pro":number,"fat":number,"carb":number,"fib":number,"emoji":"one emoji","note":"confidence note or key assumption"}`;
+    await analysePhotoAndRender(promptText,loading,result);
+  };
+  reader.readAsDataURL(file);event.target.value='';
+}
+async function analysePhotoAndRender(promptText,loading,result){
+  try{
+    const resp=await fetch('https://josh-tracker-proxy.joe-shwa-smith.workers.dev',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-App-Key':'IhDgBIUxaM86f12tBXwNIhvufgCmW5qF'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-6',max_tokens:400,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:lastPhotoType,data:lastPhotoB64}},
+          {type:'text',text:promptText}
+        ]}]
+      })
+    });
+    const data=await resp.json();
+    if(data.error){throw new Error(data.error.message);}
+    const text=data.content.filter(c=>c.type==='text').map(c=>c.text).join('');
+    const clean=text.replace(/```json\n?|```/g,'').trim();
+    const meal=JSON.parse(clean);
+    currentPhotoMeal=meal;
+    loading.classList.add('hidden');
+    renderPhotoResult(meal);
+  }catch(e){
+    loading.classList.add('hidden');
+    if(currentPhotoMeal){
+      const err=document.getElementById('ph-rescan-error');
+      if(err)err.textContent="Couldn't re-analyse this photo — your fields above are unchanged. Try Re-scan again, or edit the fields manually.";
+    }else{
       result.innerHTML=`<div style="color:var(--muted);font-size:13px;padding:8px 0">
         <p style="margin-bottom:8px">Couldn't analyse this photo. Try the <strong>Look Up Macros</strong> section instead — type what's on your plate and it'll estimate from the description.</p>
         <button class="btn btn-secondary btn-sm" style="width:auto" onclick="document.getElementById('ph-preview').classList.add('hidden');showTab('log',document.querySelectorAll('.nav-tab')[1])">Use text lookup →</button>
       </div>`;
     }
-  };
-  reader.readAsDataURL(file);event.target.value='';
+  }
 }
-function logPhotoMeal(m){addMeal(m);document.getElementById('ph-preview').classList.add('hidden');}
+function renderPhotoResult(meal){
+  const result=document.getElementById('ph-result');
+  result.innerHTML=`<div style="padding:8px 0">
+    <div class="form-group"><div class="input-label">Food (edit if the AI got it wrong)</div><input class="input-field" id="ph-name" value="${phEsc(meal.name)}"></div>
+    <div class="macro-fields" id="ph-macro-fields">
+      <div class="macro-field-wrap"><div class="input-label">Cal</div><input class="input-field" id="ph-cal" type="number" value="${meal.cal||0}"></div>
+      <div class="macro-field-wrap"><div class="input-label">Protein g</div><input class="input-field" id="ph-pro" type="number" value="${meal.pro||0}"></div>
+      <div class="macro-field-wrap"><div class="input-label">Fat g</div><input class="input-field" id="ph-fat" type="number" value="${meal.fat||0}"></div>
+      <div class="macro-field-wrap"><div class="input-label">Carbs g</div><input class="input-field" id="ph-carb" type="number" value="${meal.carb||0}"></div>
+      <div class="macro-field-wrap"><div class="input-label">Fiber g</div><input class="input-field" id="ph-fib" type="number" value="${meal.fib||0}"></div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">${phEsc(meal.note||'')}</div>
+    <div id="ph-rescan-error" style="font-size:12px;color:#EF4444;margin-bottom:6px"></div>
+    <div id="ph-action-row">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <button class="btn btn-primary btn-sm" style="width:auto" onclick="logPhotoMealFromFields()">Add to today ✓</button>
+        <button class="btn btn-secondary btn-sm" style="width:auto" onclick="saveAsQuickFood(getPhotoFieldsAsMeal())">⭐ Quick Add</button>
+        <button class="btn btn-secondary btn-sm" style="width:auto" onclick="showLeftoverOptions()">🥡 Leftovers</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" style="width:auto" onclick="rescanMealPhoto()">🔄 Re-scan</button>
+        <button class="btn btn-secondary btn-sm" style="width:auto" onclick="document.getElementById('ph-preview').classList.add('hidden')">Cancel</button>
+      </div>
+    </div>
+    <div id="ph-leftover-row" class="hidden" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Is this the amount you're eating now, or leftovers from an earlier meal?</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" style="width:auto" onclick="logLeftoversSeparately()">Log separately</button>
+        <button class="btn btn-secondary btn-sm" style="width:auto" onclick="deductLeftoversFromLastMeal()">Deduct from last meal</button>
+        <button class="btn btn-secondary btn-sm" style="width:auto" onclick="hideLeftoverOptions()">Back</button>
+      </div>
+    </div>
+  </div>`;
+}
+function hideLeftoverOptions(){
+  document.getElementById('ph-action-row').classList.remove('hidden');
+  document.getElementById('ph-leftover-row').classList.add('hidden');
+}
+function showLeftoverOptions(){
+  document.getElementById('ph-action-row').classList.add('hidden');
+  document.getElementById('ph-leftover-row').classList.remove('hidden');
+}
+function getPhotoFieldsAsMeal(){
+  return {
+    name:document.getElementById('ph-name').value,
+    cal:document.getElementById('ph-cal').value,
+    pro:document.getElementById('ph-pro').value,
+    fat:document.getElementById('ph-fat').value,
+    carb:document.getElementById('ph-carb').value,
+    fib:document.getElementById('ph-fib').value,
+    emoji:(currentPhotoMeal&&currentPhotoMeal.emoji)||'🍽️'
+  };
+}
+function logPhotoMealFromFields(){
+  addMeal(getPhotoFieldsAsMeal());
+  document.getElementById('ph-preview').classList.add('hidden');
+}
+async function rescanMealPhoto(){
+  if(!lastPhotoB64)return;
+  const nameInput=document.getElementById('ph-name');
+  const correctedName=nameInput?nameInput.value.trim():'';
+  const loading=document.getElementById('ph-loading'),result=document.getElementById('ph-result');
+  const errEl=document.getElementById('ph-rescan-error');if(errEl)errEl.textContent='';
+  loading.classList.remove('hidden');
+  const prompt=`Analyse this meal photo again, for a ${profileDescriptor()}. The user has told you the correct food identification is: "${correctedName}" — trust that identification over your first guess, but keep reassessing the portion size and macros directly from what you see in the photo (cooked weight assumed). Return ONLY valid JSON: {"name":"...","cal":number,"pro":number,"fat":number,"carb":number,"fib":number,"emoji":"one emoji","note":"confidence note or key assumption"}`;
+  await analysePhotoAndRender(prompt,loading,result);
+}
+
+// ─── LEFTOVERS ────────────────────────────────────────────────────────────────
+// Picks the most recently updated meal logged for a given date, excluding prior deduction
+// entries themselves, so a deduction can never target another deduction.
+function lastLoggableMealForDate(dateStr){
+  const meals=mealsForDate(dateStr).filter(m=>!m.isDeduction);
+  if(!meals.length)return null;
+  return [...meals].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0))[0];
+}
+function logLeftoversSeparately(){
+  addMeal(getPhotoFieldsAsMeal());
+  document.getElementById('ph-preview').classList.add('hidden');
+}
+function deductLeftoversFromLastMeal(){
+  const target=lastLoggableMealForDate(viewDateStr());
+  if(!target){ alert("No earlier meal logged today to deduct from — use \"Log separately\" instead."); return; }
+  const leftover=getPhotoFieldsAsMeal();
+  const clamp=(v,max)=>Math.min(Math.abs(+v||0),Math.abs(+max||0));
+  const dCal=clamp(leftover.cal,target.cal), dPro=clamp(leftover.pro,target.pro), dFat=clamp(leftover.fat,target.fat), dCarb=clamp(leftover.carb,target.carb), dFib=clamp(leftover.fib,target.fib);
+  addMeal({
+    name:'Leftovers removed — '+(target.name||'earlier meal'),
+    emoji:'➖',
+    cal:-dCal,pro:-dPro,fat:-dFat,carb:-dCarb,fib:-dFib,
+    isDeduction:true,deductedFrom:target.id
+  });
+  document.getElementById('ph-preview').classList.add('hidden');
+}
 
 // ─── WEIGHT ───────────────────────────────────────────────────────────────────
 function logWeight(){
@@ -2487,10 +2599,12 @@ function buildSys(){
   const suppLines=(S.supplements||[]).map(s=>`${s.name} (${s.dose})`).join(', ');
   const peptideLines=(S.peptides||[]).map(pep=>pep.dosing.type==='titration'?`${pep.name} (titrating, week ${getPeptideWeek(pep)}/${pep.dosing.schedule.length})`:`${pep.name} (${pep.dosing.doseLabel})`).join('; ');
   const goalLabel={lose:'losing weight',maintain:'maintaining weight',build:'building muscle'}[p.goalType]||'general health';
+  const measurementLines=[...(S.measurements||[])].slice(-5).map(m=>`${m.date}: ${fmtMeasureEntry(m)}${m.notes?' ('+m.notes+')':''}`).join('; ');
   return `You are ${firstName()}'s personal fitness and nutrition assistant. ${firstName()} is a ${profileDescriptor()}, currently focused on ${goalLabel}, goal weight ${p.goal||'not set'}kg.
 
 Current supplements: ${suppLines||'none'}.
 Peptides/compounds in use: ${peptideLines||'none'}.
+Recent body measurements: ${measurementLines||'none logged'}.
 
 Today so far: ${Math.round(t.cal)} cal, ${Math.round(t.pro)}g protein (goal ${p.protein||'--'}g), ${Math.round(t.fat)}g fat, ${Math.round(t.carb)}g carbs, ${getWaterTotal()}ml water.
 
