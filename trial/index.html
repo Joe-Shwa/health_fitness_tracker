@@ -642,6 +642,7 @@ select.input-field { appearance: auto; }
   <!-- MANUAL ENTRY -->
   <div class="card">
     <div class="card-title">✏️ Manual Entry</div>
+    <div class="hidden" id="m-edit-banner" style="font-size:12px;padding:8px 10px;border-radius:8px;margin-bottom:10px;line-height:1.5"></div>
     <div class="form-group">
       <div class="input-label">Food name</div>
       <input class="input-field" id="m-food" placeholder="e.g. Steak 180g + 3 boiled eggs">
@@ -949,6 +950,26 @@ function migrateArr(arr,prefix,dateField){
   });
   return arr;
 }
+// Collapses Quick Add duplicates by name (case-insensitive), preferring a custom/user-edited copy
+// over a plain seed copy, or the most recently updated on a tie. Ported from josh_tracker_v31.html
+// / generic_tracker_v12.html — this file's QUICK_FOODS_SEED had no fixed ids and the reseed line
+// below used to mint a fresh random id every time, so a storage wipe would stack duplicate staples.
+function dedupeQuickFoodsByName(){
+  const byName=new Map();
+  (S.quickFoods||[]).forEach(f=>{
+    const key=(f.n||'').trim().toLowerCase();
+    if(!key)return;
+    const cur=byName.get(key);
+    if(!cur || (f.custom && !cur.custom) || (f.custom===cur.custom && (f.updatedAt||0)>(cur.updatedAt||0))){
+      byName.set(key,f);
+    }
+  });
+  if(byName.size < (S.quickFoods||[]).length){
+    S.quickFoods=[...byName.values()];
+    return true;
+  }
+  return false;
+}
 function migrateState(){
   if(!S.tombstones)S.tombstones=[];
   if(!S.theme)S.theme='ocean';
@@ -997,9 +1018,10 @@ function migrateState(){
   if(!S.peptideChecks)S.peptideChecks={};
   S.peptides.forEach(p=>{if(p.tracking==='checklist'&&!(p.id in S.peptideChecks))S.peptideChecks[p.id]=false;});
   if(!S.quickFoods){
-    S.quickFoods=QUICK_FOODS_SEED.map(f=>({...f,id:newId('qf'),custom:false,updatedAt:Date.now()}));
+    S.quickFoods=QUICK_FOODS_SEED.map(f=>({...f,custom:false,updatedAt:Date.now()}));
   }
   S.quickFoods.forEach(f=>{if(!f.id)f.id=newId('qf');if(!f.updatedAt)f.updatedAt=Date.now();});
+  dedupeQuickFoodsByName(); // clean up duplicates from the old bug where seed ids were re-minted randomly on every reseed
   if(!S.fasting)S.fasting={windowEnabled:false,windowHours:8,windowStart:'12:00',current:null,log:[]};
   if(typeof S.fasting.windowEnabled!=='boolean')S.fasting.windowEnabled=false;
   if(!S.fasting.windowHours)S.fasting.windowHours=8;
@@ -1019,15 +1041,18 @@ const MOUNJARO_SEED = {
     schedule:Array.from({length:12},(_,i)=>({week:i+1,units:2.5,mg:2.5,vial:'2.5mg pen'}))}
 };
 
+// Fixed ids (not a random id minted at seed time) so a reseed after a storage wipe produces the
+// SAME ids and a Drive merge recognizes them as the same items instead of stacking duplicates —
+// see the Quick Add dedupe fix ported from josh_tracker_v31.html / generic_tracker_v12.html.
 const QUICK_FOODS_SEED = [
-  {n:"Greek Yoghurt",i:"🥛",c:150,p:17,f:5,cb:8,fb:0,a:"170g"},
-  {n:"2 Eggs",i:"🥚",c:140,p:12,f:10,cb:1,fb:0,a:"2 eggs"},
-  {n:"Tuna Tin",i:"🐟",c:120,p:28,f:1,cb:0,fb:0,a:"95g tin"},
-  {n:"Chicken Breast",i:"🍗",c:165,p:31,f:3,cb:0,fb:0,a:"100g"},
-  {n:"Salmon Fillet",i:"🐠",c:208,p:28,f:10,cb:0,fb:0,a:"120g"},
-  {n:"Cottage Cheese",i:"🧀",c:100,p:14,f:2,cb:5,fb:0,a:"150g"},
-  {n:"Protein Shake",i:"🥤",c:130,p:25,f:2,cb:5,fb:1,a:"1 scoop"},
-  {n:"Beef Mince",i:"🥩",c:250,p:26,f:15,cb:0,fb:0,a:"100g"},
+  {id:"qf_seed_yoghurt",n:"Greek Yoghurt",i:"🥛",c:150,p:17,f:5,cb:8,fb:0,a:"170g"},
+  {id:"qf_seed_eggs",n:"2 Eggs",i:"🥚",c:140,p:12,f:10,cb:1,fb:0,a:"2 eggs"},
+  {id:"qf_seed_tuna",n:"Tuna Tin",i:"🐟",c:120,p:28,f:1,cb:0,fb:0,a:"95g tin"},
+  {id:"qf_seed_chicken",n:"Chicken Breast",i:"🍗",c:165,p:31,f:3,cb:0,fb:0,a:"100g"},
+  {id:"qf_seed_salmon",n:"Salmon Fillet",i:"🐠",c:208,p:28,f:10,cb:0,fb:0,a:"120g"},
+  {id:"qf_seed_cottage",n:"Cottage Cheese",i:"🧀",c:100,p:14,f:2,cb:5,fb:0,a:"150g"},
+  {id:"qf_seed_shake",n:"Protein Shake",i:"🥤",c:130,p:25,f:2,cb:5,fb:1,a:"1 scoop"},
+  {id:"qf_seed_mince",n:"Beef Mince",i:"🥩",c:250,p:26,f:15,cb:0,fb:0,a:"100g"},
 ];
 
 // ─── MEASUREMENTS: field config (drives the form, tips, history summary) ──────
@@ -1499,12 +1524,20 @@ function updateMealsList(){
   const meals=mealsForDate(viewDateStr());
   if(!meals.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No meals logged yet.</div>';return;}
   const nut=(S.settings&&S.settings.nutrients)||{fat:true,carb:true,fiber:false};
+  // Deduction lines (from the Leftovers feature) get a dashed amber style so they read as an
+  // adjustment rather than a separate food item. Leftovers logged *separately* (still a normal
+  // addition to the day's totals — see logLeftoversSeparately()) get a lighter blue-tinted dashed
+  // style plus a small "LEFTOVER" tag — ported from josh_tracker_v36.html, ditto both styles were
+  // previously missing here entirely, so every Leftovers entry looked identical to a plain meal.
   el.innerHTML=meals.map(m=>{
     const parts=[`${m.cal} cal`,`${m.pro}g protein`];
     if(nut.fat)parts.push(`${m.fat}g fat`);
     if(nut.carb)parts.push(`${m.carb}g carbs`);
     if(nut.fiber)parts.push(`${m.fib||0}g fiber`);
-    return `<div class="meal-item"><div class="meal-emoji">${m.emoji||'🍽️'}</div><div class="meal-info"><div class="meal-name">${m.name}</div><div class="meal-macros">${parts.join(' · ')}</div></div><span class="meal-del" style="font-size:17px" onclick="editMeal('${m.id}')" title="Edit">✎</span><div class="meal-del" onclick="delMeal('${m.id}')" title="Delete">×</div></div>`;
+    const dedStyle=m.isDeduction?' style="border:1px dashed var(--border);background:var(--amber-pale)"':'';
+    const leftoverStyle=(!m.isDeduction&&m.isLeftover)?' style="border:1px dashed var(--border);background:var(--blue-pale)"':'';
+    const leftoverTag=(!m.isDeduction&&m.isLeftover)?' <span style="font-size:10px;font-weight:700;color:var(--blue);background:#fff;border-radius:5px;padding:1px 5px;margin-left:4px">🥡 LEFTOVER</span>':'';
+    return `<div class="meal-item"${dedStyle||leftoverStyle}><div class="meal-emoji">${m.emoji||'🍽️'}</div><div class="meal-info"><div class="meal-name">${m.name}${leftoverTag}</div><div class="meal-macros">${parts.join(' · ')}</div></div><span class="meal-del" style="font-size:17px" onclick="editMeal('${m.id}')" title="Edit">✎</span><div class="meal-del" onclick="delMeal('${m.id}')" title="Delete">×</div></div>`;
   }).join('');
 }
 function delMeal(id){if(mealEditId===id)cancelMealEdit();S.meals=S.meals.filter(m=>m.id!==id);markDeleted('meal',id);saveLocal();updateAll();}
@@ -1514,7 +1547,16 @@ function addManual(){
   const vals={name,cal:+document.getElementById('m-cal').value||0,pro:+document.getElementById('m-pro').value||0,fat:+document.getElementById('m-fat').value||0,carb:+document.getElementById('m-carb').value||0,fib:+document.getElementById('m-fib').value||0};
   if(mealEditId){
     const idx=S.meals.findIndex(m=>m.id===mealEditId);
-    if(idx>-1){S.meals[idx]={...S.meals[idx],...vals,updatedAt:Date.now()};}
+    if(idx>-1){
+      const existing=S.meals[idx];
+      // Deduction entries (Leftovers → "Deduct from last meal") are edited as positive "amount
+      // removed" values — see editMeal() — so flip the sign back to negative on save. Ported from
+      // josh_tracker_v36.html: without this, saving an edited deduction would silently turn it
+      // into an addition instead of a subtraction.
+      const sign=existing.isDeduction?-1:1;
+      const saved={...vals,cal:vals.cal*sign,pro:vals.pro*sign,fat:vals.fat*sign,carb:vals.carb*sign,fib:vals.fib*sign};
+      S.meals[idx]={...existing,...saved,updatedAt:Date.now()}; // isDeduction/isLeftover untouched
+    }
     saveLocal();updateAll();
     cancelMealEdit();
   } else {
@@ -1526,11 +1568,27 @@ function editMeal(id){
   const m=S.meals.find(x=>x.id===id);if(!m)return;
   mealEditId=id;
   document.getElementById('m-food').value=m.name;
-  document.getElementById('m-cal').value=m.cal;
-  document.getElementById('m-pro').value=m.pro;
-  document.getElementById('m-fat').value=m.fat;
-  document.getElementById('m-carb').value=m.carb;
-  document.getElementById('m-fib').value=m.fib||0;
+  // Deduction entries are stored as NEGATIVE numbers. Show the positive amount being removed
+  // instead of e.g. "-150" — editing then re-flips the sign on save (see addManual()). Ported
+  // from josh_tracker_v36.html.
+  const sign=m.isDeduction?-1:1;
+  document.getElementById('m-cal').value=m.cal*sign;
+  document.getElementById('m-pro').value=m.pro*sign;
+  document.getElementById('m-fat').value=m.fat*sign;
+  document.getElementById('m-carb').value=m.carb*sign;
+  document.getElementById('m-fib').value=(m.fib||0)*sign;
+  const banner=document.getElementById('m-edit-banner');
+  if(m.isDeduction){
+    banner.style.background='var(--amber-pale)';banner.style.borderLeft='3px solid var(--amber)';banner.style.color='var(--dark)';
+    banner.textContent="➖ Editing a Leftovers deduction. The numbers below are the amount being removed from today's totals — enter them as positive, they'll stay subtracted when you save.";
+    banner.classList.remove('hidden');
+  } else if(m.isLeftover){
+    banner.style.background='var(--blue-pale)';banner.style.borderLeft='3px solid var(--blue)';banner.style.color='var(--dark)';
+    banner.textContent='🥡 Editing a Leftovers entry logged separately — it still adds to today\'s totals like any other meal.';
+    banner.classList.remove('hidden');
+  } else {
+    banner.classList.add('hidden');
+  }
   document.getElementById('m-save-btn').textContent='Update meal';
   document.getElementById('m-cancel-btn').classList.remove('hidden');
   showTab('log',document.querySelector('.nav-tab[onclick*="\'log\'"]'));
@@ -1540,6 +1598,7 @@ function cancelMealEdit(){
   mealEditId=null;
   document.getElementById('m-save-btn').textContent='Add to today';
   document.getElementById('m-cancel-btn').classList.add('hidden');
+  const banner=document.getElementById('m-edit-banner');if(banner)banner.classList.add('hidden');
   ['m-food','m-cal','m-pro','m-fat','m-carb','m-fib'].forEach(id=>document.getElementById(id).value='');
 }
 function applyNutrientSettings(){
@@ -1951,7 +2010,11 @@ function lastLoggableMealForDate(dateStr){
   return [...meals].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0))[0];
 }
 function logLeftoversSeparately(){
-  addMeal(getPhotoFieldsAsMeal());
+  // Flagged isLeftover so the meal log can visibly distinguish this from a brand-new meal (see
+  // updateMealsList()) and so editMeal() can show the right context banner — ported from
+  // josh_tracker_v36.html. It still ADDS to today's totals like any other meal; "separately"
+  // means "its own log line", not "subtracted".
+  addMeal({...getPhotoFieldsAsMeal(),isLeftover:true});
   document.getElementById('ph-preview').classList.add('hidden');
 }
 function deductLeftoversFromLastMeal(){
@@ -2958,6 +3021,7 @@ async function loadFromDrive(){
         S.water = mergeById(S.water, driveData.water, 'water').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
         S.movement = mergeById(S.movement, driveData.movement, 'movement');
         S.quickFoods = mergeById(S.quickFoods, driveData.quickFoods, 'quickfood');
+        dedupeQuickFoodsByName(); // clean up any same-name duplicates the Drive merge just re-introduced
         S.measurements = mergeById(S.measurements, driveData.measurements, 'measurement').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
         if(driveData.fasting){
           if(!S.fasting)S.fasting={windowEnabled:false,windowHours:8,windowStart:'12:00',current:null,log:[]};
