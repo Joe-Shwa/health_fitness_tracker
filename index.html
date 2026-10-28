@@ -265,7 +265,6 @@ select.input-field { appearance: auto; }
 </style>
 </head>
 <body>
-
 <!-- SETUP -->
 <div class="overlay" id="setup-overlay">
   <div class="overlay-card">
@@ -396,7 +395,6 @@ select.input-field { appearance: auto; }
     <button class="btn btn-primary" style="margin-top:18px" onclick="dismissWelcome()">Let's go →</button>
   </div>
 </div>
-
 <!-- HEADER -->
 <div class="header hidden" id="main-header">
   <div class="header-top">
@@ -517,7 +515,7 @@ select.input-field { appearance: auto; }
     <p style="margin-bottom:10px">Calories and protein are always tracked. Turn Fat, Carbs and Fiber on or off to personalise what shows up on Today and in your log — your targets keep being calculated either way, this just controls what's on screen.</p>
     <div id="settings-nutrient-list"></div>
 
-    <button class="btn btn-primary" style="margin-top:18px" onclick="closeSettings()">Save & Close</button>
+    <button class="btn btn-primary" style="margin-top:18px" onclick="closeSettings()">Save &amp; Close</button>
   </div>
 </div>
 
@@ -535,7 +533,6 @@ select.input-field { appearance: auto; }
   <span id="edit-day-banner-text"></span>
   <button class="btn btn-secondary btn-sm" style="width:auto;padding:5px 10px;font-size:11px;flex-shrink:0" onclick="jumpToToday()">Jump to Today</button>
 </div>
-
 <!-- TODAY -->
 <div class="section hidden active" id="tab-today">
   <div class="card" style="padding:10px 14px">
@@ -602,12 +599,18 @@ select.input-field { appearance: auto; }
     <div id="protein-msg" style="font-size:13px;color:var(--muted);line-height:1.6">Log your first meal to see your protein progress.</div>
   </div>
 
+  <div class="card">
+    <div class="card-title">📝 Notes</div>
+    <textarea class="input-field" id="daynote-input" rows="3" placeholder="Anything worth noting about today — how you felt, what worked, what didn't..." style="resize:vertical;font-family:inherit"></textarea>
+    <button class="btn btn-secondary btn-sm" style="width:auto;margin-top:8px" onclick="saveDayNote()">Save note</button>
+    <p style="font-size:11px;color:var(--muted);margin-top:6px">Saved per day — paging to a past day shows that day's note.</p>
+  </div>
+
   <div class="card hidden" id="other-logs-card">
     <div class="card-title">Other Logs This Day</div>
     <div id="other-logs-body"></div>
   </div>
 </div>
-
 <!-- LOG -->
 <div class="section hidden" id="tab-log">
 
@@ -691,7 +694,6 @@ select.input-field { appearance: auto; }
     <div class="qa-grid" id="qa-grid"></div>
   </div>
 </div>
-
 <!-- MOVEMENT -->
 <div class="section hidden" id="tab-movement">
   <div class="card">
@@ -769,7 +771,6 @@ select.input-field { appearance: auto; }
 
   <div class="card"><div class="card-title">History</div><div id="ef-history" style="font-size:13px;color:var(--muted)">No fasts logged yet.</div></div>
 </div>
-
 <!-- WEIGHT -->
 <div class="section hidden" id="tab-weight">
   <div class="card">
@@ -861,7 +862,6 @@ select.input-field { appearance: auto; }
   </div>
   <div class="card"><div class="card-title">Recent Nights</div><div id="sl-history" style="font-size:13px;color:var(--muted)">No entries yet.</div></div>
 </div>
-
 <!-- SUPPS -->
 <div class="section hidden" id="tab-supps">
   <div class="card">
@@ -907,7 +907,6 @@ select.input-field { appearance: auto; }
     </div>
   </div>
 </div>
-
 <script>
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let S = {
@@ -927,6 +926,7 @@ let S = {
   peptideLogs: null,
   peptideChecks: null,
   quickFoods: null,
+  dayNotes: null,
   fasting: {windowEnabled:false, windowHours:8, windowStart:'12:00', current:null, log:[]},
   settings: {tabs:{weight:true,sleep:true,supps:true,peptides:false,fasting:false,ask:true}, nutrients:{fat:true,carb:true,fiber:false}},
   lastGreetedDate: null,
@@ -970,6 +970,23 @@ function dedupeQuickFoodsByName(){
   });
   if(byName.size < (S.quickFoods||[]).length){
     S.quickFoods=[...byName.values()];
+    return true;
+  }
+  return false;
+}
+// Collapse duplicate day notes on the same date — same class of bug as dedupeQuickFoodsByName
+// above: a Drive merge is id-keyed and blind to date, so if a note ever got re-minted with a new
+// id for the same day (e.g. offline edit on two devices before syncing), both copies would stack
+// instead of one replacing the other. Keeps the most recently updated entry per date.
+function dedupeDayNotesByDate(){
+  const byDate=new Map();
+  (S.dayNotes||[]).forEach(n=>{
+    if(!n||!n.date)return;
+    const cur=byDate.get(n.date);
+    if(!cur || (n.updatedAt||0)>(cur.updatedAt||0)) byDate.set(n.date,n);
+  });
+  if(byDate.size < (S.dayNotes||[]).length){
+    S.dayNotes=[...byDate.values()];
     return true;
   }
   return false;
@@ -1037,6 +1054,9 @@ function migrateState(){
   }
   S.quickFoods.forEach(f=>{if(!f.id)f.id=newId('qf');if(!f.updatedAt)f.updatedAt=Date.now();});
   dedupeQuickFoodsByName(); // clean up duplicates from the old bug where seed ids were re-minted randomly on every reseed
+  if(!S.dayNotes)S.dayNotes=[];
+  migrateArr(S.dayNotes,'daynote','date');
+  dedupeDayNotesByDate();
   if(!S.fasting)S.fasting={windowEnabled:false,windowHours:8,windowStart:'12:00',current:null,log:[]};
   if(typeof S.fasting.windowEnabled!=='boolean')S.fasting.windowEnabled=false;
   if(!S.fasting.windowHours)S.fasting.windowHours=8;
@@ -1046,7 +1066,6 @@ function migrateState(){
   if(!S.measurements)S.measurements=[];
   migrateArr(S.measurements,'ms','date');
 }
-
 const MOUNJARO_SEED = {
   id:'mounjaro', name:'Mounjaro (Tirzepatide)', custom:false,
   purpose:'GLP-1/GIP dual receptor agonist — reduces appetite and supports fat loss alongside improved insulin sensitivity.',
@@ -1198,7 +1217,6 @@ function profileDescriptor(){
   const p=S.profile||{};
   return `${p.age||'adult'}yo ${p.sex==='female'?'female':'male'}, ${p.height||'--'}cm, ~${(S.weights&&S.weights.length)?S.weights[S.weights.length-1].weight:(p.current||'--')}kg`;
 }
-
 // ─── SETTINGS (which tabs are visible — Today/Log/Move always on) ────────────
 const OPTIONAL_TABS=[
   {key:'fasting',label:'⏱️ Fasting'},
@@ -1484,15 +1502,46 @@ function finishSetup(){
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 function showTab(name,el){document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.getElementById('tab-'+name).classList.add('active');if(el)el.classList.add('active');}
-
 // ─── DATED-LOG HELPERS ─────────────────────────────────────────────────────────
 function mealsForDate(dateStr){return S.meals.filter(m=>m.date===dateStr);}
 function waterForDate(dateStr){return S.water.filter(w=>w.date===dateStr);}
 function movementForDate(dateStr){return S.movement.find(m=>m.date===dateStr)||null;}
 function sleepForDate(dateStr){return S.sleep.find(s=>s.date===dateStr)||null;}
 function weightForDate(dateStr){return S.weights.find(w=>w.date===dateStr)||null;}
+function dayNoteForDate(dateStr){return (S.dayNotes||[]).find(n=>n.date===dateStr)||null;}
 function totalsForDate(dateStr){return mealsForDate(dateStr).reduce((a,m)=>({cal:a.cal+(+m.cal||0),pro:a.pro+(+m.pro||0),fat:a.fat+(+m.fat||0),carb:a.carb+(+m.carb||0),fib:a.fib+(+m.fib||0)}),{cal:0,pro:0,fat:0,carb:0,fib:0});}
 function waterTotalForDate(dateStr){return waterForDate(dateStr).reduce((a,w)=>a+(+w.ml||0),0);}
+
+// ─── DAY NOTES ─────────────────────────────────────────────────────────────────
+// Free-text note per day — saved from the Today tab's "📝 Notes" card. One entry per date
+// (like weight/sleep), so re-saving on the same day updates the existing entry instead of
+// stacking duplicates.
+function saveDayNote(){
+  const el=document.getElementById('daynote-input');
+  if(!el)return;
+  const text=el.value;
+  const dateStr=viewDateStr();
+  if(!S.dayNotes)S.dayNotes=[];
+  const existing=dayNoteForDate(dateStr);
+  if(!text.trim()){
+    if(existing){ S.dayNotes=S.dayNotes.filter(n=>n.id!==existing.id); markDeleted('daynote',existing.id); }
+  } else if(existing){
+    existing.text=text; existing.updatedAt=Date.now();
+  } else {
+    S.dayNotes.push({id:newId('daynote'),updatedAt:Date.now(),date:dateStr,text});
+  }
+  saveLocal();
+}
+// Loads whatever note exists for the currently-viewed day into the textarea. Only ever called
+// from the day-change/initial-load path (renderViewDate), never from updateAll() — updateAll()
+// also runs on every background Drive re-sync, and calling this there would stomp on text the
+// user is still typing.
+function loadDayNoteIntoForm(){
+  const el=document.getElementById('daynote-input');
+  if(!el)return;
+  const existing=dayNoteForDate(viewDateStr());
+  el.value=existing?(existing.text||''):'';
+}
 
 // ─── MACROS (today display) ────────────────────────────────────────────────────
 function getTotals(){return totalsForDate(viewDateStr());}
@@ -1702,7 +1751,6 @@ function removeQuickFood(id){
   saveLocal();
   renderQuickAdd();
 }
-
 // ─── FASTING ──────────────────────────────────────────────────────────────────
 function timeStrToMins(t){const parts=(t||'12:00').split(':');return (+parts[0]||0)*60+(+parts[1]||0);}
 function minsOfDay(d){return d.getHours()*60+d.getMinutes();}
@@ -1817,7 +1865,6 @@ function renderFastingTab(){
   renderExtendedFastUI();
   renderFastHistory();
 }
-
 // ─── TEXT MACRO LOOKUP ────────────────────────────────────────────────────────
 async function doLookup(){
   const q=document.getElementById('lookup-input').value.trim();if(!q)return;
@@ -2027,7 +2074,6 @@ function deductLeftoversFromLastMeal(){
   });
   document.getElementById('ph-preview').classList.add('hidden');
 }
-
 // ─── WEIGHT ───────────────────────────────────────────────────────────────────
 function logWeight(){
   const w=parseFloat(document.getElementById('w-input').value);if(!w)return;
@@ -2189,7 +2235,6 @@ function deleteMeasurementEntry(id){
   saveLocal();
   renderMeasurementsHistory();
 }
-
 // ─── SLEEP ────────────────────────────────────────────────────────────────────
 let sleepEditId=null;
 function hm(h,m){return (+h||0)+((+m||0)/60);}
@@ -2437,7 +2482,6 @@ function evaluateStreakForDate(dateStr){
   if(S.streak.log.length>120)S.streak.log=S.streak.log.slice(-120);
   recomputeStreak();
 }
-
 // ─── WELCOME-BACK GREETING (in-app streak greeting, shown once per day) ───────
 function streakMilestoneLine(count){
   if(count>=30)return "🏆 30 days! That's a serious habit now.";
@@ -2507,6 +2551,7 @@ function renderViewDate(){
   }
   updateAll();
   loadMeasurementsIntoForm(); // only on an actual day change/initial load — see note in updateAll()
+  loadDayNoteIntoForm(); // ditto — never from updateAll(), which also runs on background Drive sync
   updateOtherLogs();
 }
 function updateOtherLogs(){
@@ -2514,17 +2559,17 @@ function updateOtherLogs(){
   if(!card)return;
   if(isViewingToday()){ card.classList.add('hidden'); return; }
   const dateStr=viewDateStr();
-  const mv=movementForDate(dateStr),sl=sleepForDate(dateStr),wt=weightForDate(dateStr),ms=measurementsForDate(dateStr);
-  if(!mv&&!sl&&!wt&&!ms){ card.classList.add('hidden'); return; }
+  const mv=movementForDate(dateStr),sl=sleepForDate(dateStr),wt=weightForDate(dateStr),ms=measurementsForDate(dateStr),dn=dayNoteForDate(dateStr);
+  if(!mv&&!sl&&!wt&&!ms&&!dn){ card.classList.add('hidden'); return; }
   card.classList.remove('hidden');
   let html='';
   if(mv)html+=`<div class="history-row"><span>🏃 Movement</span><span style="font-weight:700">${mv.steps.toLocaleString()} steps · ${mv.calBurned.toLocaleString()} cal burned</span></div>`;
   if(sl)html+=`<div class="history-row"><span>😴 Sleep</span><span style="font-weight:700">${fmtHM(sl.total)} total · ${fmtMins(sl.deep)} deep · ${fmtMins(sl.rem)} REM</span></div>`;
   if(wt)html+=`<div class="history-row"><span>⚖️ Weight</span><span style="font-weight:700">${wt.weight}kg</span></div>`;
   if(ms)html+=`<div class="history-row"><span>📏 Measurements</span><span style="font-weight:700;text-align:right;max-width:65%">${fmtMeasureEntry(ms)||'Logged'}</span></div>`;
+  if(dn&&dn.text)html+=`<div class="history-row"><span>📝 Note</span><span style="font-weight:700;text-align:right;max-width:65%">${phEsc(dn.text)}</span></div>`;
   document.getElementById('other-logs-body').innerHTML=html;
 }
-
 // ─── PEPTIDES (fully generic — off by default until turned on in Settings) ───
 function getPeptideWeek(p){
   if(p.dosing.type!=='titration')return null;
@@ -2690,7 +2735,6 @@ function renderPeptides(){
     return html+body;
   }).join('')||'<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No peptides added yet.</div>';
 }
-
 // ─── CHAT ─────────────────────────────────────────────────────────────────────
 function renderChatGreeting(){
   const msgsEl=document.getElementById('chat-msgs');
@@ -2708,11 +2752,13 @@ function buildSys(){
   const peptideLines=(S.peptides||[]).map(pep=>pep.dosing.type==='titration'?`${pep.name} (titrating, week ${getPeptideWeek(pep)}/${pep.dosing.schedule.length})`:`${pep.name} (${pep.dosing.doseLabel})`).join('; ');
   const goalLabel={lose:'losing weight',maintain:'maintaining weight',build:'building muscle'}[p.goalType]||'general health';
   const measurementLines=[...(S.measurements||[])].slice(-5).map(m=>`${m.date}: ${fmtMeasureEntry(m)}${m.notes?' ('+m.notes+')':''}`).join('; ');
+  const dayNoteLines=[...(S.dayNotes||[])].filter(n=>n.text&&n.text.trim()).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,5).map(n=>`${n.date}: ${n.text}`).join('; ');
   return `You are ${firstName()}'s personal fitness and nutrition assistant. ${firstName()} is a ${profileDescriptor()}, currently focused on ${goalLabel}, goal weight ${p.goal||'not set'}kg.
 
 Current supplements: ${suppLines||'none'}.
 Peptides/compounds in use: ${peptideLines||'none'}.
 Recent body measurements: ${measurementLines||'none logged'}.
+Recent day notes: ${dayNoteLines||'none'}.
 
 Today so far: ${Math.round(t.cal)} cal, ${Math.round(t.pro)}g protein (goal ${p.protein||'--'}g), ${Math.round(t.fat)}g fat, ${Math.round(t.carb)}g carbs, ${getWaterTotal()}ml water.
 
@@ -2825,7 +2871,6 @@ function addProteinShake(){
     fat,carb,emoji:'🥤'
   });
 }
-
 // ─── SUPPLEMENTS ────────────────────────────────────────────────────────────
 function renderSupps(){
   const list=S.supplements||[];
@@ -2876,7 +2921,6 @@ function removeSupp(id){
   markDeleted('supplement',id);
   saveLocal();renderSupps();
 }
-
 // ─── GOOGLE DRIVE SYNC ────────────────────────────────────────────────────────
 const GOOGLE_CLIENT_ID = '93450585738-k7hsn3fjsu69sigcktdfftfcsjk91qcu.apps.googleusercontent.com';
 const DRIVE_FILE_NAME = 'generic-tracker-data.json';
@@ -3068,6 +3112,8 @@ async function loadFromDrive(){
         S.quickFoods = mergeById(S.quickFoods, driveData.quickFoods, 'quickfood');
         dedupeQuickFoodsByName(); // clean up any same-name duplicates the Drive merge just re-introduced
         S.measurements = mergeById(S.measurements, driveData.measurements, 'measurement').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
+        S.dayNotes = mergeById(S.dayNotes, driveData.dayNotes, 'daynote').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
+        dedupeDayNotesByDate(); // clean up any same-date duplicates the Drive merge just re-introduced
         if(driveData.fasting){
           if(!S.fasting)S.fasting={windowEnabled:false,windowHours:8,windowStart:'12:00',current:null,log:[]};
           S.fasting.log = mergeById(S.fasting.log, driveData.fasting.log, 'fast').sort((a,b)=>(b.startedAt||0)-(a.startedAt||0));
@@ -3120,6 +3166,7 @@ async function syncToDrive(){
       tombstones: S.tombstones,
       quickFoods: S.quickFoods,
       measurements: S.measurements,
+      dayNotes: S.dayNotes,
       lastSync: new Date().toISOString()
     });
     const resp = await driveApiFetch(
