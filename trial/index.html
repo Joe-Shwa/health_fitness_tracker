@@ -538,6 +538,12 @@ select.input-field { appearance: auto; }
     </div>
   </div>
   <div class="card">
+    <div class="card-title">📝 Notes <span id="day-note-status" style="float:right;font-weight:700;color:var(--green)"></span></div>
+    <p style="font-size:13px;color:var(--muted);margin-top:-4px;margin-bottom:10px">Anything worth remembering about this day. Visible to the Ask assistant.</p>
+    <textarea class="input-field" id="day-note-text" rows="3" placeholder="e.g. Felt off today, travelling, etc." style="resize:vertical;font-family:inherit"></textarea>
+    <button class="btn btn-secondary btn-sm" style="width:auto;margin-top:8px" onclick="saveDayNote()">Save note</button>
+  </div>
+  <div class="card">
     <div class="card-title">Status <span id="streak-count" style="float:right;font-weight:700;color:var(--amber)">🔥 0 days</span></div>
     <div class="sm" id="traffic-light" style="text-align:left;padding:12px">Log a meal to see today's status.</div>
     <div id="streak-best" style="font-size:11px;color:var(--muted);margin-top:8px;text-align:right"></div>
@@ -912,6 +918,7 @@ let S = {
   streak: { count: 0, longest: 0, log: [] },
   weights: [],
   measurements: null,
+  dayNotes: null,
   sleep: [],
   supps: {multi:false,vitd:false,omega3:false},
   supplements: null,
@@ -968,6 +975,18 @@ function dedupeQuickFoodsByName(){
     S.quickFoods=[...byName.values()];
     return true;
   }
+  return false;
+}
+// Dedupes dayNotes by date (one note per calendar day), preferring the most recently updated copy —
+// same pattern as dedupeQuickFoodsByName / the weights-by-date collapse in migrateState. Ported from
+// josh_tracker_v38.html.
+function dedupeDayNotesByDate(){
+  const byDate=new Map();
+  (S.dayNotes||[]).forEach(n=>{
+    const cur=byDate.get(n.date);
+    if(!cur || (n.updatedAt||0) > (cur.updatedAt||0)) byDate.set(n.date, n);
+  });
+  if(byDate.size < (S.dayNotes||[]).length){ S.dayNotes=[...byDate.values()]; return true; }
   return false;
 }
 function migrateState(){
@@ -1030,6 +1049,9 @@ function migrateState(){
   migrateArr(S.fasting.log,'fast');
   if(!S.measurements)S.measurements=[];
   migrateArr(S.measurements,'ms','date');
+  if(!S.dayNotes)S.dayNotes=[];
+  migrateArr(S.dayNotes,'note','date');
+  dedupeDayNotesByDate();
 }
 
 const MOUNJARO_SEED = {
@@ -1475,8 +1497,46 @@ function waterForDate(dateStr){return S.water.filter(w=>w.date===dateStr);}
 function movementForDate(dateStr){return S.movement.find(m=>m.date===dateStr)||null;}
 function sleepForDate(dateStr){return S.sleep.find(s=>s.date===dateStr)||null;}
 function weightForDate(dateStr){return S.weights.find(w=>w.date===dateStr)||null;}
+function dayNoteForDate(dateStr){return (S.dayNotes||[]).find(n=>n.date===dateStr)||null;}
 function totalsForDate(dateStr){return mealsForDate(dateStr).reduce((a,m)=>({cal:a.cal+(+m.cal||0),pro:a.pro+(+m.pro||0),fat:a.fat+(+m.fat||0),carb:a.carb+(+m.carb||0),fib:a.fib+(+m.fib||0)}),{cal:0,pro:0,fat:0,carb:0,fib:0});}
 function waterTotalForDate(dateStr){return waterForDate(dateStr).reduce((a,w)=>a+(+w.ml||0),0);}
+
+// ─── DAY NOTES ──────────────────────────────────────────────────────────────
+function saveDayNote(){
+  const el=document.getElementById('day-note-text');
+  if(!el)return;
+  const text=el.value.trim();
+  const dateStr=viewDateStr();
+  const existing=dayNoteForDate(dateStr);
+  if(!text){
+    if(existing){
+      S.dayNotes=(S.dayNotes||[]).filter(n=>n.id!==existing.id);
+      markDeleted('note',existing.id);
+    }
+  } else if(existing){
+    existing.text=text;
+    existing.updatedAt=Date.now();
+  } else {
+    if(!S.dayNotes)S.dayNotes=[];
+    S.dayNotes.push({id:newId('note'),date:dateStr,updatedAt:Date.now(),text});
+  }
+  saveLocal();
+  const status=document.getElementById('day-note-status');
+  if(status){
+    status.textContent='Saved ✓';
+    setTimeout(()=>{ if(status)status.textContent=''; },1500);
+  }
+}
+// Only called on an actual day-change/initial load (see renderViewDate) — NOT from updateAll(),
+// which also runs on a background Drive sync and would otherwise wipe in-progress typing.
+function loadDayNoteIntoForm(){
+  const el=document.getElementById('day-note-text');
+  if(!el)return;
+  const existing=dayNoteForDate(viewDateStr());
+  el.value=existing?existing.text:'';
+  const status=document.getElementById('day-note-status');
+  if(status)status.textContent='';
+}
 
 // ─── MACROS (today display) ────────────────────────────────────────────────────
 function getTotals(){return totalsForDate(viewDateStr());}
@@ -2462,6 +2522,7 @@ function renderViewDate(){
   }
   updateAll();
   loadMeasurementsIntoForm(); // only on an actual day change/initial load — see note in updateAll()
+  loadDayNoteIntoForm(); // ditto — never from updateAll(), which also runs on background Drive sync
   updateOtherLogs();
 }
 function updateOtherLogs(){
@@ -2469,14 +2530,15 @@ function updateOtherLogs(){
   if(!card)return;
   if(isViewingToday()){ card.classList.add('hidden'); return; }
   const dateStr=viewDateStr();
-  const mv=movementForDate(dateStr),sl=sleepForDate(dateStr),wt=weightForDate(dateStr),ms=measurementsForDate(dateStr);
-  if(!mv&&!sl&&!wt&&!ms){ card.classList.add('hidden'); return; }
+  const mv=movementForDate(dateStr),sl=sleepForDate(dateStr),wt=weightForDate(dateStr),ms=measurementsForDate(dateStr),dn=dayNoteForDate(dateStr);
+  if(!mv&&!sl&&!wt&&!ms&&!dn){ card.classList.add('hidden'); return; }
   card.classList.remove('hidden');
   let html='';
   if(mv)html+=`<div class="history-row"><span>🏃 Movement</span><span style="font-weight:700">${mv.steps.toLocaleString()} steps · ${mv.calBurned.toLocaleString()} cal burned</span></div>`;
   if(sl)html+=`<div class="history-row"><span>😴 Sleep</span><span style="font-weight:700">${fmtHM(sl.total)} total · ${fmtMins(sl.deep)} deep · ${fmtMins(sl.rem)} REM</span></div>`;
   if(wt)html+=`<div class="history-row"><span>⚖️ Weight</span><span style="font-weight:700">${wt.weight}kg</span></div>`;
   if(ms)html+=`<div class="history-row"><span>📏 Measurements</span><span style="font-weight:700;text-align:right;max-width:65%">${fmtMeasureEntry(ms)||'Logged'}</span></div>`;
+  if(dn)html+=`<div class="history-row"><span>📝 Note</span><span style="font-weight:700;text-align:right;max-width:65%">${dn.text}</span></div>`;
   document.getElementById('other-logs-body').innerHTML=html;
 }
 
@@ -2663,11 +2725,13 @@ function buildSys(){
   const peptideLines=(S.peptides||[]).map(pep=>pep.dosing.type==='titration'?`${pep.name} (titrating, week ${getPeptideWeek(pep)}/${pep.dosing.schedule.length})`:`${pep.name} (${pep.dosing.doseLabel})`).join('; ');
   const goalLabel={lose:'losing weight',maintain:'maintaining weight',build:'building muscle'}[p.goalType]||'general health';
   const measurementLines=[...(S.measurements||[])].slice(-5).map(m=>`${m.date}: ${fmtMeasureEntry(m)}${m.notes?' ('+m.notes+')':''}`).join('; ');
+  const dayNoteLines=[...(S.dayNotes||[])].filter(n=>n.text).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,5).map(n=>`${n.date}: ${n.text}`).join('; ');
   return `You are ${firstName()}'s personal fitness and nutrition assistant. ${firstName()} is a ${profileDescriptor()}, currently focused on ${goalLabel}, goal weight ${p.goal||'not set'}kg.
 
 Current supplements: ${suppLines||'none'}.
 Peptides/compounds in use: ${peptideLines||'none'}.
 Recent body measurements: ${measurementLines||'none logged'}.
+Recent day notes: ${dayNoteLines||'none'}.
 
 Today so far: ${Math.round(t.cal)} cal, ${Math.round(t.pro)}g protein (goal ${p.protein||'--'}g), ${Math.round(t.fat)}g fat, ${Math.round(t.carb)}g carbs, ${getWaterTotal()}ml water.
 
@@ -3023,6 +3087,8 @@ async function loadFromDrive(){
         S.quickFoods = mergeById(S.quickFoods, driveData.quickFoods, 'quickfood');
         dedupeQuickFoodsByName(); // clean up any same-name duplicates the Drive merge just re-introduced
         S.measurements = mergeById(S.measurements, driveData.measurements, 'measurement').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
+        S.dayNotes = mergeById(S.dayNotes, driveData.dayNotes, 'note').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
+        dedupeDayNotesByDate(); // clean up any same-date duplicates the Drive merge just re-introduced
         if(driveData.fasting){
           if(!S.fasting)S.fasting={windowEnabled:false,windowHours:8,windowStart:'12:00',current:null,log:[]};
           S.fasting.log = mergeById(S.fasting.log, driveData.fasting.log, 'fast').sort((a,b)=>(b.startedAt||0)-(a.startedAt||0));
@@ -3075,6 +3141,7 @@ async function syncToDrive(){
       tombstones: S.tombstones,
       quickFoods: S.quickFoods,
       measurements: S.measurements,
+      dayNotes: S.dayNotes,
       lastSync: new Date().toISOString()
     });
     const resp = await driveApiFetch(
